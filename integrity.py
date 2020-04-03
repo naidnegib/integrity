@@ -4,8 +4,10 @@ import argparse
 import os
 import hashlib
 import yaml
+import json
 from datetime import datetime
 from pathlib import Path
+from io import StringIO
 
 time_zone = None
 
@@ -26,11 +28,13 @@ INTEGRITY_DESC = "IntegrityChecker"
 INTEGRITY_TYPE = "ChecksumInventory"
 INTEGRITY_VERSION = "0.1"
 INTEGRITY_CHECKSUM_FILENAME = ".ck++.nfo"
+INTEGRITY_CHECKSUM_FILENAME_JSON = ".ck++.nfoj"
 
 TXT_PROG = INTEGRITY_DESC
 TXT_DESCRIPTION = "Create and check integrity checksums for files in folder"
 
 TXT_HELP_ABSOLUTEPATH = "Save absolute path when checksum was created"
+TXT_HELP_JSON = "Check/Save checksumg file using JSON format instead of YAML"
 TXT_HELP_RECURSIVE = "Process subfolders recursively"
 TXT_HELP_IGNOREDOTS = "Include all. Do NOT ignore folders stating with dot (.)"
 TXT_HELP_VERBOSE = "Verbose mode"
@@ -64,6 +68,7 @@ def main():
     parser.add_argument('-a', '--all', action='store_true', help=TXT_HELP_IGNOREDOTS)
     parser.add_argument('-r', '--recursive', action='store_true', help=TXT_HELP_RECURSIVE)
     parser.add_argument('-v', '--verbose', action='store_true', help=TXT_HELP_VERBOSE)
+    parser.add_argument('-j', '--json', action='store_true', help=TXT_HELP_JSON)
 
     args = parser.parse_args()
     path = Path(args.path)
@@ -100,14 +105,17 @@ def main():
         current = current + 1
 
     output[KEY_RESOURCES] = resources
-    
-    output_str = yaml.dump(output,default_flow_style=False)
+
+    output_str = json.dumps(output, indent=4, sort_keys=True, default=str) if args.json else yaml.dump(output,default_flow_style=False)    
+    #output_str = yaml.dump(output,default_flow_style=False)
+    #output_str = json.dumps(output, indent=4, sort_keys=True, default=str)
     if args.verbose: print (
         INTEGRITY_CHECKSUM_FILENAME 
         + ' -----------------------------------------\n' 
-        +  output_str
+        +  output_str 
         + '\n----------------------------------------- '
-        + INTEGRITY_CHECKSUM_FILENAME)
+        + INTEGRITY_CHECKSUM_FILENAME
+        )
         
 
 if __name__ == '__main__':
