@@ -73,10 +73,10 @@ def main():
     args = parser.parse_args()
     path = Path(args.path)
 
-    if args.absolutepath: output[KEY_PATH] = path.absolute().as_posix()
+    if args.absolutepath: output[KEY_PATH] = os.path.splitdrive(path.absolute().as_posix())[1]
     
     if args.verbose: print (TXT_V_ARGS % (args))
-    if args.verbose: print (TXT_V_GENERATING % (path.absolute().as_posix()))
+    if args.verbose: print (TXT_V_GENERATING % (os.path.splitdrive(path.absolute().as_posix())[1]))
 
     files = os.listdir(path)
     resources = []
