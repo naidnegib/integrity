@@ -18,6 +18,7 @@ KEY_FILENAME = "file"
 KEY_FILESIZE = "size"
 KEY_FILECHANGEDATE = "changed"
 KEY_FILECREATIONDATE = "date"
+KEY_FILECHECKDATE = "checked"   # Date when this file was used to check all the files listed within
 KEY_PATH = "path"
 KEY_RESOURCES = "resources"
 KEY_SHA256 = "sha256"
@@ -46,6 +47,8 @@ TXT_V_FILES_DIRECTORY = "\t\tIgnoring folder: '%s'"
 TXT_V_FILES_FILE = "\t\tProcessing file: '%s'"
 TXT_V_GENERATING = "Generating checksums for directory: %s"
 
+TXT_E_ACCESS = "Error: '%s' failed to be accessed"
+
 
 def sha256_checksum(filename, block_size=65536):
     sha256 = hashlib.sha256()
@@ -53,6 +56,9 @@ def sha256_checksum(filename, block_size=65536):
         for block in iter(lambda: f.read(block_size), b''):
             sha256.update(block)
     return sha256.hexdigest()
+
+def loadPreviousHash(json):
+    return
 
 def main():
     output = {
@@ -78,7 +84,12 @@ def main():
     if args.verbose: print (TXT_V_ARGS % (args))
     if args.verbose: print (TXT_V_GENERATING % (os.path.splitdrive(path.absolute().as_posix())[1]))
 
-    files = os.listdir(path)
+    try:
+        files = os.listdir(path)
+    except:
+        print (TXT_E_ACCESS % (args.path))
+        exit(-1)
+    
     resources = []
     filecount = len(files)
 
@@ -107,8 +118,7 @@ def main():
     output[KEY_RESOURCES] = resources
 
     output_str = json.dumps(output, indent=4, sort_keys=True, default=str) if args.json else yaml.dump(output,default_flow_style=False)    
-    #output_str = yaml.dump(output,default_flow_style=False)
-    #output_str = json.dumps(output, indent=4, sort_keys=True, default=str)
+
     if args.verbose: print (
         INTEGRITY_CHECKSUM_FILENAME 
         + ' -----------------------------------------\n' 
@@ -116,7 +126,8 @@ def main():
         + '\n----------------------------------------- '
         + INTEGRITY_CHECKSUM_FILENAME
         )
-        
+
+    
 
 if __name__ == '__main__':
     main()
