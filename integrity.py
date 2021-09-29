@@ -35,11 +35,13 @@ INTEGRITY_CHECKSUM_FILENAME_JSON = ".ck++.nfoj"
 TXT_PROG = INTEGRITY_DESC
 TXT_DESCRIPTION = "Create and check integrity checksums for files in folder"
 
-TXT_HELP_ABSOLUTEPATH = "Save absolute path when checksum was created"
+TXT_HELP_ABSOLUTE_PATH = "Save absolute path when checksum was created"
 TXT_HELP_DEBUG = "Debug mode"
 TXT_HELP_JSON = "Check/Save checksumg file using JSON format instead of YAML"
 TXT_HELP_RECURSIVE = "Process subfolders recursively"
-TXT_HELP_IGNOREDOTS = "Include all. Do NOT ignore folders stating with dot (.)"
+TXT_HELP_IGNORE = "Ignore already stored checksums"
+TXT_HELP_IGNORE_DOTS = "Include all. Do NOT ignore folders stating with dot (.)"
+TXT_HELP_TEST = "Test mode. Does NOT write updates to checksum files"
 TXT_HELP_VERBOSE = "Verbose mode"
 
 TXT_V_ARGS = "Arguments detected: %s"
@@ -86,7 +88,7 @@ def loadPreviousHash(path, json_, verbose=False, debug=False):
 
         if debug: print(TXT_V_FILES_INPUT_CONTENTS % (input_file, previous))
     except:
-        print (TXT_E_FILES_READING_INPUT % (path))
+        if debug: print (TXT_E_FILES_READING_INPUT % (path))
 
     return previous
 
@@ -128,7 +130,7 @@ def processFolder(path, args):
         print (TXT_E_ACCESS % (args.path))
         exit(-1)
     
-    input = loadPreviousHash(path, args.json, args.verbose, args.debug)
+    input = {} if args.ignore else loadPreviousHash(path, args.json, args.verbose, args.debug)
     previous_resources = input.get(KEY_RESOURCES)
 
     resources = {}
@@ -162,7 +164,7 @@ def processFolder(path, args):
             # Check if the item is already hashed, then alert and save history!
             try:
                 if previous_resources[filename][KEY_SHA256] != resource[KEY_SHA256]:
-                    print (TXT_O_FILES_CHANGED % (filename, previous_resources[filename][KEY_SHA256], resource[KEY_SHA256]))
+                    print (TXT_O_FILES_CHANGED % (file, previous_resources[filename][KEY_SHA256], resource[KEY_SHA256]))
                     if KEY_PREVIOUS_VALUE in previous_resources[filename]: previous_resources[filename].pop(KEY_PREVIOUS_VALUE)
 
                     resources[filename][KEY_PREVIOUS_VALUE]=previous_resources[filename]
@@ -175,7 +177,7 @@ def processFolder(path, args):
     
     # Recap and save everything in this folder
     output[KEY_RESOURCES] = resources
-    saveCurrentHash(path, args.json, output, args.verbose, args.debug)
+    if not args.test: saveCurrentHash(path, args.json, output, args.verbose, args.debug)
 
     # Memory clean-up
     output = resources = input = previous_resources = {}
@@ -190,14 +192,15 @@ def processFolder(path, args):
 def main():
     parser = argparse.ArgumentParser(description=TXT_DESCRIPTION, prog=TXT_PROG)
     parser.add_argument('path', nargs='?', default=os.getcwd())
-    parser.add_argument('-p', '--absolutepath', action='store_true', help=TXT_HELP_ABSOLUTEPATH)
-    parser.add_argument('-a', '--all', action='store_true', help=TXT_HELP_IGNOREDOTS)
+    parser.add_argument('-p', '--absolutepath', action='store_true', help=TXT_HELP_ABSOLUTE_PATH)
+    parser.add_argument('-a', '--all', action='store_true', help=TXT_HELP_IGNORE_DOTS)
     parser.add_argument('-r', '--recursive', action='store_true', help=TXT_HELP_RECURSIVE)
     parser.add_argument('-j', '--json', action='store_true', help=TXT_HELP_JSON)
+    parser.add_argument('-i', '--ignore', action='store_true', help=TXT_HELP_IGNORE)
+    parser.add_argument('-t', '--test', action='store_true', help=TXT_HELP_TEST)
     parser.add_argument('-v', '--verbose', action='store_true', help=TXT_HELP_VERBOSE)
     parser.add_argument('-d', '--debug', action='store_true', help=TXT_HELP_DEBUG)
     # TODO: Hacer que el verbose sea un nivel de 0 a X en vez de valores (verbose, debug, ...)
-    # TODO: Poner opción --ignore para ignorar los datos anteriores y machacarlos
 
     args = parser.parse_args()
     path = Path(args.path)
