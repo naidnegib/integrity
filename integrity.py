@@ -44,6 +44,7 @@ TXT_V_ARGS = "Arguments detected: %s"
 TXT_V_FILES_COUNT = "Detected %d items in folder"
 TXT_V_FILES_CURRENT = "\tResource %d/%d"
 TXT_V_FILES_DIRECTORY = "\t\tIgnoring folder: '%s'"
+TXT_V_FILES_IGNORED_DOTFILE = "\t\tIgnoring file (--all not set): '%s'"
 TXT_V_FILES_FILE = "\t\tProcessing file: '%s'"
 TXT_V_GENERATING = "Generating checksums for directory: %s"
 TXT_V_OUTPUT_CONTENTS = "------------------- FILE %s TO DUMP ----------------------\n%s -------------------- END OF FILE ---------------------\n"
@@ -70,6 +71,7 @@ def loadPreviousHash(path, isJson, verbose=False):
     return previous
 
 def saveCurrentHash(path, isJson, current, verbose=False):
+    ok = True
     filename = INTEGRITY_CHECKSUM_FILENAME_JSON if isJson else INTEGRITY_CHECKSUM_FILENAME
     output_str = json.dumps(current, indent=4, sort_keys=True, default=str) if isJson else yaml.dump(current, default_flow_style=False)    
 
@@ -83,7 +85,8 @@ def saveCurrentHash(path, isJson, current, verbose=False):
         if verbose: print (TXT_V_OUTPUT_OK % (outputFile))
     except:
         print (TXT_E_WRITING_OUTPUT % (path))
-    return
+        ok = False
+    return ok
 
 def main():
     output = {
@@ -98,8 +101,9 @@ def main():
     parser.add_argument('-p', '--absolutepath', action='store_true', help=TXT_HELP_ABSOLUTEPATH)
     parser.add_argument('-a', '--all', action='store_true', help=TXT_HELP_IGNOREDOTS)
     parser.add_argument('-r', '--recursive', action='store_true', help=TXT_HELP_RECURSIVE)
-    parser.add_argument('-v', '--verbose', action='store_true', help=TXT_HELP_VERBOSE)
     parser.add_argument('-j', '--json', action='store_true', help=TXT_HELP_JSON)
+    parser.add_argument('-v', '--verbose', action='store_true', help=TXT_HELP_VERBOSE)
+    # TODO: Poner parámetro silent mode para que no salga nada por pantalla y haya un modo por defecto que sea el verbose-light
 
     args = parser.parse_args()
     path = Path(args.path)
@@ -125,11 +129,16 @@ def main():
 
     if args.verbose: print (TXT_V_FILES_COUNT % (filecount))
 
-    current = 1
+    current = 0
     for filename in files:
-        file = path / filename
-
+        current = current + 1
         if args.verbose: print (TXT_V_FILES_CURRENT % (current, filecount))
+
+        if str(filename).startswith(".") and not args.all: 
+            if args.verbose: print (TXT_V_FILES_IGNORED_DOTFILE % (filename))
+            continue
+        
+        file = path / filename
 
         if not os.path.isdir(file):
             if args.verbose: print (TXT_V_FILES_FILE % (filename))
@@ -143,7 +152,6 @@ def main():
             resources.append(resource)
         else:
             if args.verbose: print (TXT_V_FILES_DIRECTORY % (filename))
-        current = current + 1
 
     output[KEY_RESOURCES] = resources
 
