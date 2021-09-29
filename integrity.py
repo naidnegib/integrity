@@ -35,6 +35,7 @@ TXT_PROG = INTEGRITY_DESC
 TXT_DESCRIPTION = "Create and check integrity checksums for files in folder"
 
 TXT_HELP_ABSOLUTEPATH = "Save absolute path when checksum was created"
+TXT_HELP_DEBUG = "Debug mode"
 TXT_HELP_JSON = "Check/Save checksumg file using JSON format instead of YAML"
 TXT_HELP_RECURSIVE = "Process subfolders recursively"
 TXT_HELP_IGNOREDOTS = "Include all. Do NOT ignore folders stating with dot (.)"
@@ -45,13 +46,16 @@ TXT_V_FILES_COUNT = "Detected %d items in folder"
 TXT_V_FILES_CURRENT = "\tResource %d/%d"
 TXT_V_FILES_DIRECTORY = "\t\tIgnoring folder: '%s'"
 TXT_V_FILES_IGNORED_DOTFILE = "\t\tIgnoring file (--all not set): '%s'"
+TXT_V_FILES_INPUT_CONTENTS = "------------------- CONVERTED FILE %s READ ----------------------\n%s -------------------- END OF OBJECT ---------------------\n"
+TXT_V_FILES_INPUT_OK = "%s found and read!"
 TXT_V_FILES_FILE = "\t\tProcessing file: '%s'"
-TXT_V_GENERATING = "Generating checksums for directory: %s"
-TXT_V_OUTPUT_CONTENTS = "------------------- FILE %s TO DUMP ----------------------\n%s -------------------- END OF FILE ---------------------\n"
-TXT_V_OUTPUT_OK = "%s saved properly"
+TXT_V_FILES_OUTPUT_CONTENTS = "------------------- FILE %s TO DUMP ----------------------\n%s -------------------- END OF FILE ---------------------\n"
+TXT_V_FILES_OUTPUT_OK = "%s saved properly"
+TXT_V_GENERATING_CHECKSUMS = "Generating checksums for directory: %s"
 
 TXT_E_ACCESS = "Error: '%s' failed to be accessed"
-TXT_E_WRITING_OUTPUT = "Error: Can't write to %s"
+TXT_E_FILES_READING_INPUT = "Error: '%s' found, but can't be read"
+TXT_E_FILES_WRITING_OUTPUT = "Error: Can't write to %s"
 
 
 def sha256_checksum(filename, block_size=65536):
@@ -61,30 +65,50 @@ def sha256_checksum(filename, block_size=65536):
             sha256.update(block)
     return sha256.hexdigest()
 
-def loadPreviousHash(path, isJson, verbose=False):
+def loadPreviousHash(path, json_, verbose=False, debug=False):
     previous = {}
-    filename = INTEGRITY_CHECKSUM_FILENAME_JSON if isJson else INTEGRITY_CHECKSUM_FILENAME
+    filename = INTEGRITY_CHECKSUM_FILENAME_JSON if json_ else INTEGRITY_CHECKSUM_FILENAME
+ 
+    #if verbose: print (TXT_V_OUTPUT_CONTENTS % (filename, output_str))
+        
+    try:
+        input_file = str(os.path.join(path, filename))
+        f = open (input_file, "r")
+        input_str = f.read ()
+        f.close()
+        
+        if verbose: print (TXT_V_FILES_INPUT_OK % (input_file))
+
+        previous = json.loads(input_str) if json_ else yaml.safe_load(input_str)
+
+        if debug: print(TXT_V_FILES_INPUT_CONTENTS % (input_file, previous))
+    except:
+        print (TXT_E_FILES_READING_INPUT % (path))
+
+
+#output_str = json.dumps(current, indent=4, sort_keys=True, default=str) if isJson else yaml.dump(current, default_flow_style=False)    
+
     #try: 
     #    #file = 
     #except:
     #    # ...
     return previous
 
-def saveCurrentHash(path, isJson, current, verbose=False):
+def saveCurrentHash(path, json_, current, verbose=False, debug=False):
     ok = True
-    filename = INTEGRITY_CHECKSUM_FILENAME_JSON if isJson else INTEGRITY_CHECKSUM_FILENAME
-    output_str = json.dumps(current, indent=4, sort_keys=True, default=str) if isJson else yaml.dump(current, default_flow_style=False)    
+    filename = INTEGRITY_CHECKSUM_FILENAME_JSON if json_ else INTEGRITY_CHECKSUM_FILENAME
+    output_str = json.dumps(current, indent=4, sort_keys=True, default=str) if json_ else yaml.dump(current, default_flow_style=False)    
 
-    if verbose: print (TXT_V_OUTPUT_CONTENTS % (filename, output_str))
+    if debug: print (TXT_V_FILES_OUTPUT_CONTENTS % (filename, output_str))
         
     try:
-        outputFile = str(os.path.join(path, filename))
-        f = open (outputFile, "w")
+        output_file = str(os.path.join(path, filename))
+        f = open (output_file, "w")
         f.write (output_str)
         f.close()
-        if verbose: print (TXT_V_OUTPUT_OK % (outputFile))
+        if verbose: print (TXT_V_FILES_OUTPUT_OK % (output_file))
     except:
-        print (TXT_E_WRITING_OUTPUT % (path))
+        print (TXT_E_FILES_WRITING_OUTPUT % (path))
         ok = False
     return ok
 
@@ -103,15 +127,17 @@ def main():
     parser.add_argument('-r', '--recursive', action='store_true', help=TXT_HELP_RECURSIVE)
     parser.add_argument('-j', '--json', action='store_true', help=TXT_HELP_JSON)
     parser.add_argument('-v', '--verbose', action='store_true', help=TXT_HELP_VERBOSE)
-    # TODO: Poner parámetro silent mode para que no salga nada por pantalla y haya un modo por defecto que sea el verbose-light
+    parser.add_argument('-d', '--debug', action='store_true', help=TXT_HELP_DEBUG)
+    # TODO: Hacer que el verbose sea un nivel de 0 a X en vez de valores (verbose, debug, ...)
 
     args = parser.parse_args()
     path = Path(args.path)
 
+    if args.debug: args.verbose = True
     output[KEY_PATH] = path.absolute().as_posix() if args.absolutepath else os.path.splitdrive(path.absolute().as_posix())[1]
     
     if args.verbose: print (TXT_V_ARGS % (args))
-    if args.verbose: print (TXT_V_GENERATING % (os.path.splitdrive(path.absolute().as_posix())[1]))
+    if args.verbose: print (TXT_V_GENERATING_CHECKSUMS % (os.path.splitdrive(path.absolute().as_posix())[1]))
 
     try:
         files = os.listdir(path)
@@ -121,18 +147,19 @@ def main():
     
 
 
-    #loadPreviousHash(path, args.json)
+    loadPreviousHash(path, args.json, args.verbose, args.debug)
 
 
     resources = []
-    filecount = len(files)
+    subfolders = []
+    file_count = len(files)
 
-    if args.verbose: print (TXT_V_FILES_COUNT % (filecount))
+    if args.verbose: print (TXT_V_FILES_COUNT % (file_count))
 
     current = 0
     for filename in files:
         current = current + 1
-        if args.verbose: print (TXT_V_FILES_CURRENT % (current, filecount))
+        if args.verbose: print (TXT_V_FILES_CURRENT % (current, file_count))
 
         if str(filename).startswith(".") and not args.all: 
             if args.verbose: print (TXT_V_FILES_IGNORED_DOTFILE % (filename))
@@ -141,6 +168,7 @@ def main():
         file = path / filename
 
         if not os.path.isdir(file):
+            subfolders.append(file)
             if args.verbose: print (TXT_V_FILES_FILE % (filename))
 
             resource = {
@@ -155,7 +183,7 @@ def main():
 
     output[KEY_RESOURCES] = resources
 
-    saveCurrentHash(path, args.json, output, args.verbose)
+    saveCurrentHash(path, args.json, output, args.verbose, args.debug)
     
 
 if __name__ == '__main__':
