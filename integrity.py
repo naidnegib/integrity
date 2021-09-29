@@ -58,10 +58,10 @@ TXT_V_GENERATING_CHECKSUMS = "Generating checksums for directory: %s"
 TXT_O_FILES_CHANGED = "File '%s' changed! From: '%s' to: '%s'"
 
 TXT_E_ACCESS = "Error: '%s' failed to be accessed"
-TXT_E_FILES_READING_INPUT = "Error: '%s' can't read previous information"
+TXT_E_FILES_READING_INPUT = "Warning: '%s' can't read previous information"
 TXT_E_FILES_WRITING_OUTPUT = "Error: Can't write to %s"
 
-
+# Function used to generate the checksum / hash of the file
 def sha256_checksum(filename, block_size=65536):
     sha256 = hashlib.sha256()
     with open(filename, 'rb') as f:
@@ -69,6 +69,7 @@ def sha256_checksum(filename, block_size=65536):
             sha256.update(block)
     return sha256.hexdigest()
 
+# Search for previous values and return them as a dictionary
 def loadPreviousHash(path, json_, verbose=False, debug=False):
     previous = {}
     filename = INTEGRITY_CHECKSUM_FILENAME_JSON if json_ else INTEGRITY_CHECKSUM_FILENAME
@@ -89,6 +90,7 @@ def loadPreviousHash(path, json_, verbose=False, debug=False):
 
     return previous
 
+# Save current checksums / hashes
 def saveCurrentHash(path, json_, current, verbose=False, debug=False):
     ok = True
     filename = INTEGRITY_CHECKSUM_FILENAME_JSON if json_ else INTEGRITY_CHECKSUM_FILENAME
@@ -107,7 +109,8 @@ def saveCurrentHash(path, json_, current, verbose=False, debug=False):
         ok = False
     return ok
 
-def main():
+# Process an specific path according to the specified args
+def processFolder(path, args):  
     output = {
     KEY_DESC: INTEGRITY_DESC,
     KEY_VERSION: INTEGRITY_VERSION,
@@ -115,24 +118,8 @@ def main():
     KEY_CREATION: datetime.now(tz=time_zone)
     }
 
-    parser = argparse.ArgumentParser(description=TXT_DESCRIPTION, prog=TXT_PROG)
-    parser.add_argument('path', nargs='?', default=os.getcwd())
-    parser.add_argument('-p', '--absolutepath', action='store_true', help=TXT_HELP_ABSOLUTEPATH)
-    parser.add_argument('-a', '--all', action='store_true', help=TXT_HELP_IGNOREDOTS)
-    parser.add_argument('-r', '--recursive', action='store_true', help=TXT_HELP_RECURSIVE)
-    parser.add_argument('-j', '--json', action='store_true', help=TXT_HELP_JSON)
-    parser.add_argument('-v', '--verbose', action='store_true', help=TXT_HELP_VERBOSE)
-    parser.add_argument('-d', '--debug', action='store_true', help=TXT_HELP_DEBUG)
-    # TODO: Hacer que el verbose sea un nivel de 0 a X en vez de valores (verbose, debug, ...)
-    # TODO: Poner opción --ignore para ignorar los datos anteriores y machacarlos
-
-    args = parser.parse_args()
-    path = Path(args.path)
-
-    if args.debug: args.verbose = True
     output[KEY_PATH] = path.absolute().as_posix() if args.absolutepath else os.path.splitdrive(path.absolute().as_posix())[1]
-    
-    if args.verbose: print (TXT_V_ARGS % (args))
+
     if args.verbose: print (TXT_V_GENERATING_CHECKSUMS % (os.path.splitdrive(path.absolute().as_posix())[1]))
 
     try:
@@ -185,10 +172,40 @@ def main():
         else:
             if args.verbose: print (TXT_V_FILES_DIRECTORY % (filename))
             subfolders.append(file) # Queue for later processing, if recursive
-
+    
+    # Recap and save everything in this folder
     output[KEY_RESOURCES] = resources
-
     saveCurrentHash(path, args.json, output, args.verbose, args.debug)
+
+    # Memory clean-up
+    output = resources = input = previous_resources = {}
+
+    # Process sub-folders
+    if args.recursive:
+        for folder in subfolders:
+            processFolder (folder, args)
+    
+    return
+
+def main():
+    parser = argparse.ArgumentParser(description=TXT_DESCRIPTION, prog=TXT_PROG)
+    parser.add_argument('path', nargs='?', default=os.getcwd())
+    parser.add_argument('-p', '--absolutepath', action='store_true', help=TXT_HELP_ABSOLUTEPATH)
+    parser.add_argument('-a', '--all', action='store_true', help=TXT_HELP_IGNOREDOTS)
+    parser.add_argument('-r', '--recursive', action='store_true', help=TXT_HELP_RECURSIVE)
+    parser.add_argument('-j', '--json', action='store_true', help=TXT_HELP_JSON)
+    parser.add_argument('-v', '--verbose', action='store_true', help=TXT_HELP_VERBOSE)
+    parser.add_argument('-d', '--debug', action='store_true', help=TXT_HELP_DEBUG)
+    # TODO: Hacer que el verbose sea un nivel de 0 a X en vez de valores (verbose, debug, ...)
+    # TODO: Poner opción --ignore para ignorar los datos anteriores y machacarlos
+
+    args = parser.parse_args()
+    path = Path(args.path)
+
+    if args.debug: args.verbose = True
+    if args.verbose: print (TXT_V_ARGS % (args))
+
+    processFolder(path, args)
     
 
 if __name__ == '__main__':
