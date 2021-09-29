@@ -172,14 +172,16 @@ def main():
                 KEY_SHA256: sha256_checksum(file)}
             resources[filename]=resource
 
-            # Check if the item is already hashed
+            # Check if the item is already hashed, then alert and save history!
             try:
                 if previous_resources[filename][KEY_SHA256] != resource[KEY_SHA256]:
                     print (TXT_O_FILES_CHANGED % (filename, previous_resources[filename][KEY_SHA256], resource[KEY_SHA256]))
+                    if KEY_PREVIOUS_VALUE in previous_resources[filename]: previous_resources[filename].pop(KEY_PREVIOUS_VALUE)
+
                     resources[filename][KEY_PREVIOUS_VALUE]=previous_resources[filename]
             except:
                 if args.verbose: print (TXT_V_FILE_NOT_HASHED % (filename))
-                
+
         else:
             if args.verbose: print (TXT_V_FILES_DIRECTORY % (filename))
             subfolders.append(file) # Queue for later processing, if recursive
