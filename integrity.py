@@ -20,6 +20,7 @@ KEY_FILECHANGEDATE = "changed"
 KEY_FILECREATIONDATE = "date"
 KEY_FILECHECKDATE = "checked"   # Date when this file was used to check all the files listed within
 KEY_PATH = "path"
+KEY_PREVIOUS_VALUE = "previous"
 KEY_RESOURCES = "resources"
 KEY_SHA256 = "sha256"
 KEY_TYPE = "type"
@@ -42,9 +43,10 @@ TXT_HELP_IGNOREDOTS = "Include all. Do NOT ignore folders stating with dot (.)"
 TXT_HELP_VERBOSE = "Verbose mode"
 
 TXT_V_ARGS = "Arguments detected: %s"
+TXT_V_FILE_NOT_HASHED = "\t\t'%s' not hashed previously"
 TXT_V_FILES_COUNT = "Detected %d items in folder"
 TXT_V_FILES_CURRENT = "\tResource %d/%d"
-TXT_V_FILES_DIRECTORY = "\t\tIgnoring folder: '%s'"
+TXT_V_FILES_DIRECTORY = "\t\tFolder: '%s'"
 TXT_V_FILES_IGNORED_DOTFILE = "\t\tIgnoring file (--all not set): '%s'"
 TXT_V_FILES_INPUT_CONTENTS = "------------------- CONVERTED FILE %s READ ----------------------\n%s -------------------- END OF OBJECT ---------------------\n"
 TXT_V_FILES_INPUT_OK = "%s found and read!"
@@ -53,8 +55,10 @@ TXT_V_FILES_OUTPUT_CONTENTS = "------------------- FILE %s TO DUMP -------------
 TXT_V_FILES_OUTPUT_OK = "%s saved properly"
 TXT_V_GENERATING_CHECKSUMS = "Generating checksums for directory: %s"
 
+TXT_O_FILES_CHANGED = "File '%s' changed! From: '%s' to: '%s'"
+
 TXT_E_ACCESS = "Error: '%s' failed to be accessed"
-TXT_E_FILES_READING_INPUT = "Error: '%s' found, but can't be read"
+TXT_E_FILES_READING_INPUT = "Error: '%s' can't read previous information"
 TXT_E_FILES_WRITING_OUTPUT = "Error: Can't write to %s"
 
 
@@ -68,9 +72,7 @@ def sha256_checksum(filename, block_size=65536):
 def loadPreviousHash(path, json_, verbose=False, debug=False):
     previous = {}
     filename = INTEGRITY_CHECKSUM_FILENAME_JSON if json_ else INTEGRITY_CHECKSUM_FILENAME
- 
-    #if verbose: print (TXT_V_OUTPUT_CONTENTS % (filename, output_str))
-        
+     
     try:
         input_file = str(os.path.join(path, filename))
         f = open (input_file, "r")
@@ -85,13 +87,6 @@ def loadPreviousHash(path, json_, verbose=False, debug=False):
     except:
         print (TXT_E_FILES_READING_INPUT % (path))
 
-
-#output_str = json.dumps(current, indent=4, sort_keys=True, default=str) if isJson else yaml.dump(current, default_flow_style=False)    
-
-    #try: 
-    #    #file = 
-    #except:
-    #    # ...
     return previous
 
 def saveCurrentHash(path, json_, current, verbose=False, debug=False):
@@ -129,6 +124,7 @@ def main():
     parser.add_argument('-v', '--verbose', action='store_true', help=TXT_HELP_VERBOSE)
     parser.add_argument('-d', '--debug', action='store_true', help=TXT_HELP_DEBUG)
     # TODO: Hacer que el verbose sea un nivel de 0 a X en vez de valores (verbose, debug, ...)
+    # TODO: Poner opción --ignore para ignorar los datos anteriores y machacarlos
 
     args = parser.parse_args()
     path = Path(args.path)
@@ -145,12 +141,10 @@ def main():
         print (TXT_E_ACCESS % (args.path))
         exit(-1)
     
+    input = loadPreviousHash(path, args.json, args.verbose, args.debug)
+    previous_resources = input.get(KEY_RESOURCES)
 
-
-    loadPreviousHash(path, args.json, args.verbose, args.debug)
-
-
-    resources = []
+    resources = {}
     subfolders = []
     file_count = len(files)
 
@@ -168,7 +162,6 @@ def main():
         file = path / filename
 
         if not os.path.isdir(file):
-            subfolders.append(file)
             if args.verbose: print (TXT_V_FILES_FILE % (filename))
 
             resource = {
@@ -177,9 +170,19 @@ def main():
                 KEY_FILECREATIONDATE: datetime.fromtimestamp(os.path.getctime(file), tz=time_zone),
                 KEY_FILECHANGEDATE: datetime.fromtimestamp(os.path.getmtime(file), tz=time_zone),
                 KEY_SHA256: sha256_checksum(file)}
-            resources.append(resource)
+            resources[filename]=resource
+
+            # Check if the item is already hashed
+            try:
+                if previous_resources[filename][KEY_SHA256] != resource[KEY_SHA256]:
+                    print (TXT_O_FILES_CHANGED % (filename, previous_resources[filename][KEY_SHA256], resource[KEY_SHA256]))
+                    resources[filename][KEY_PREVIOUS_VALUE]=previous_resources[filename]
+            except:
+                if args.verbose: print (TXT_V_FILE_NOT_HASHED % (filename))
+                
         else:
             if args.verbose: print (TXT_V_FILES_DIRECTORY % (filename))
+            subfolders.append(file) # Queue for later processing, if recursive
 
     output[KEY_RESOURCES] = resources
 
