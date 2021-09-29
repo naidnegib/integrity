@@ -28,14 +28,17 @@ KEY_VERSION = "version"
 
 INTEGRITY_DESC = "IntegrityChecker"
 INTEGRITY_TYPE = "ChecksumInventory"
-INTEGRITY_VERSION = "0.1"
+INTEGRITY_VERSION = "0.2"
 INTEGRITY_CHECKSUM_FILENAME = ".ck++.nfo"
 INTEGRITY_CHECKSUM_FILENAME_JSON = ".ck++.nfoj"
+INTEGRITY_CHECKSUM_FILENAME_CSV = "ck++.csv"
 
 TXT_PROG = INTEGRITY_DESC
 TXT_DESCRIPTION = "Create and check integrity checksums for files in folder"
 
 TXT_HELP_ABSOLUTE_PATH = "Save absolute path when checksum was created"
+TXT_HELP_CSV = "Generate a CSV file (tab separated) detailing all the files processed"
+TXT_HELP_CSV_FAST = "Generate a CSV file detailing all the files already processed (use hash files)"
 TXT_HELP_DEBUG = "Debug mode"
 TXT_HELP_JSON = "Check/Save checksumg file using JSON format instead of YAML"
 TXT_HELP_RECURSIVE = "Process subfolders recursively"
@@ -55,12 +58,15 @@ TXT_V_FILES_INPUT_OK = "%s found and read!"
 TXT_V_FILES_FILE = "\t\tProcessing file: '%s'"
 TXT_V_FILES_OUTPUT_CONTENTS = "------------------- FILE %s TO DUMP ----------------------\n%s -------------------- END OF FILE ---------------------\n"
 TXT_V_FILES_OUTPUT_OK = "%s saved properly"
+TXT_V_FILES_READING_INPUT = "Warning: '%s' can't read previous information"
 TXT_V_GENERATING_CHECKSUMS = "Generating checksums for directory: %s"
+
+#TXT_O_CSV_LINE = "\"%s\"\t\"%s\"\t%s\t\"%s\"\t\"%s\"\t\"%s\"\t\"%s\"\t\"%s\"\t" # path, filename, size, changed, hash, oldhash, date, modification
+TXT_O_CSV_LINE = "\"%s\";\"%s\";%s;\"%s\";\"%s\";\"%s\";\"%s\";\"%s\"" # path, filename, size, changed, hash, oldhash, date, modification
 
 TXT_O_FILES_CHANGED = "File '%s' changed! From: '%s' to: '%s'"
 
 TXT_E_ACCESS = "Error: '%s' failed to be accessed"
-TXT_E_FILES_READING_INPUT = "Warning: '%s' can't read previous information"
 TXT_E_FILES_WRITING_OUTPUT = "Error: Can't write to %s"
 
 # Function used to generate the checksum / hash of the file
@@ -88,7 +94,7 @@ def loadPreviousHash(path, json_, verbose=False, debug=False):
 
         if debug: print(TXT_V_FILES_INPUT_CONTENTS % (input_file, previous))
     except:
-        if debug: print (TXT_E_FILES_READING_INPUT % (path))
+        if debug: print (TXT_V_FILES_READING_INPUT % (path))
 
     return previous
 
@@ -112,7 +118,7 @@ def saveCurrentHash(path, json_, current, verbose=False, debug=False):
     return ok
 
 # Process an specific path according to the specified args
-def processFolder(path, args):  
+def processFolder(path, args, csv_file):  
     output = {
     KEY_DESC: INTEGRITY_DESC,
     KEY_VERSION: INTEGRITY_VERSION,
@@ -149,6 +155,8 @@ def processFolder(path, args):
             continue
         
         file = path / filename
+        file_changed = False
+        old_hash = ""
 
         if not os.path.isdir(file):
             if args.verbose: print (TXT_V_FILES_FILE % (filename))
@@ -164,6 +172,8 @@ def processFolder(path, args):
             # Check if the item is already hashed, then alert and save history!
             try:
                 if previous_resources[filename][KEY_SHA256] != resource[KEY_SHA256]:
+                    file_changed = True
+                    old_hash = previous_resources[filename][KEY_SHA256]
                     print (TXT_O_FILES_CHANGED % (file, previous_resources[filename][KEY_SHA256], resource[KEY_SHA256]))
                     if KEY_PREVIOUS_VALUE in previous_resources[filename]: previous_resources[filename].pop(KEY_PREVIOUS_VALUE)
 
@@ -171,6 +181,9 @@ def processFolder(path, args):
             except:
                 if args.verbose: print (TXT_V_FILE_NOT_HASHED % (filename))
 
+            # Write a new CSV line, if requested
+            if args.csv:  # path, filename, size, changed, hash, oldhash, date, modification
+                print(TXT_O_CSV_LINE % (path, resource[KEY_FILENAME], resource[KEY_FILESIZE], file_changed, resource[KEY_SHA256], old_hash, resource[KEY_FILECREATIONDATE], resource[KEY_FILECHANGEDATE]), file=csv_file)
         else:
             if args.verbose: print (TXT_V_FILES_DIRECTORY % (filename))
             subfolders.append(file) # Queue for later processing, if recursive
@@ -185,7 +198,7 @@ def processFolder(path, args):
     # Process sub-folders
     if args.recursive:
         for folder in subfolders:
-            processFolder (folder, args)
+            processFolder (folder, args, csv_file)
     
     return
 
@@ -196,19 +209,32 @@ def main():
     parser.add_argument('-a', '--all', action='store_true', help=TXT_HELP_IGNORE_DOTS)
     parser.add_argument('-r', '--recursive', action='store_true', help=TXT_HELP_RECURSIVE)
     parser.add_argument('-j', '--json', action='store_true', help=TXT_HELP_JSON)
+    parser.add_argument('-c', '--csv', action='store_true', help=TXT_HELP_CSV)
+    parser.add_argument('-f', '--fastcsv', action='store_true', help=TXT_HELP_CSV_FAST)
     parser.add_argument('-i', '--ignore', action='store_true', help=TXT_HELP_IGNORE)
     parser.add_argument('-t', '--test', action='store_true', help=TXT_HELP_TEST)
     parser.add_argument('-v', '--verbose', action='store_true', help=TXT_HELP_VERBOSE)
     parser.add_argument('-d', '--debug', action='store_true', help=TXT_HELP_DEBUG)
     # TODO: Hacer que el verbose sea un nivel de 0 a X en vez de valores (verbose, debug, ...)
+    # TODO: Poder especificar fichero de salida para el CSV
+    # TODO: Implementar --csv y --fastcsv
+    # TODO: Hacer que --fastcsv sea incompatible con --ignore
 
     args = parser.parse_args()
     path = Path(args.path)
+    try:
+        csv_file = open(INTEGRITY_CHECKSUM_FILENAME_CSV,"w")
+    except:
+        print (TXT_E_FILES_WRITING_OUTPUT % (INTEGRITY_CHECKSUM_FILENAME_CSV))
+        csv_file = open(os.devnull,"w")
+        args.csv = False
 
     if args.debug: args.verbose = True
     if args.verbose: print (TXT_V_ARGS % (args))
 
-    processFolder(path, args)
+    processFolder(path, args, csv_file)
+
+    csv_file.close()
     
 
 if __name__ == '__main__':
