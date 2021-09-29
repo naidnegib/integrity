@@ -46,8 +46,11 @@ TXT_V_FILES_CURRENT = "\tResource %d/%d"
 TXT_V_FILES_DIRECTORY = "\t\tIgnoring folder: '%s'"
 TXT_V_FILES_FILE = "\t\tProcessing file: '%s'"
 TXT_V_GENERATING = "Generating checksums for directory: %s"
+TXT_V_OUTPUT_CONTENTS = "------------------- FILE %s TO DUMP ----------------------\n%s -------------------- END OF FILE ---------------------\n"
+TXT_V_OUTPUT_OK = "%s saved properly"
 
 TXT_E_ACCESS = "Error: '%s' failed to be accessed"
+TXT_E_WRITING_OUTPUT = "Error: Can't write to %s"
 
 
 def sha256_checksum(filename, block_size=65536):
@@ -57,7 +60,29 @@ def sha256_checksum(filename, block_size=65536):
             sha256.update(block)
     return sha256.hexdigest()
 
-def loadPreviousHash(json):
+def loadPreviousHash(path, isJson, verbose=False):
+    previous = {}
+    filename = INTEGRITY_CHECKSUM_FILENAME_JSON if isJson else INTEGRITY_CHECKSUM_FILENAME
+    #try: 
+    #    #file = 
+    #except:
+    #    # ...
+    return previous
+
+def saveCurrentHash(path, isJson, current, verbose=False):
+    filename = INTEGRITY_CHECKSUM_FILENAME_JSON if isJson else INTEGRITY_CHECKSUM_FILENAME
+    output_str = json.dumps(current, indent=4, sort_keys=True, default=str) if isJson else yaml.dump(current, default_flow_style=False)    
+
+    if verbose: print (TXT_V_OUTPUT_CONTENTS % (filename, output_str))
+        
+    try:
+        outputFile = str(os.path.join(path, filename))
+        f = open (outputFile, "w")
+        f.write (output_str)
+        f.close()
+        if verbose: print (TXT_V_OUTPUT_OK % (outputFile))
+    except:
+        print (TXT_E_WRITING_OUTPUT % (path))
     return
 
 def main():
@@ -90,6 +115,11 @@ def main():
         print (TXT_E_ACCESS % (args.path))
         exit(-1)
     
+
+
+    #loadPreviousHash(path, args.json)
+
+
     resources = []
     filecount = len(files)
 
@@ -117,16 +147,7 @@ def main():
 
     output[KEY_RESOURCES] = resources
 
-    output_str = json.dumps(output, indent=4, sort_keys=True, default=str) if args.json else yaml.dump(output,default_flow_style=False)    
-
-    if args.verbose: print (
-        INTEGRITY_CHECKSUM_FILENAME 
-        + ' -----------------------------------------\n' 
-        +  output_str 
-        + '\n----------------------------------------- '
-        + INTEGRITY_CHECKSUM_FILENAME
-        )
-
+    saveCurrentHash(path, args.json, output, args.verbose)
     
 
 if __name__ == '__main__':
