@@ -169,9 +169,9 @@ def processFolder(path, args, csv_file):
             if args.verbose: print (TXT_V_FILES_FILE % (filename))
 
             file_size = 0
-            file_creation = ""
-            file_change = ""
-            file_hash = ""
+            file_creation = datetime.now(tz=time_zone)
+            file_change = datetime.now(tz=time_zone)
+            file_hash = "ERROR!"
 
             try:
             # I/O operations may raise exceptions due to file system defects!!!
@@ -240,6 +240,7 @@ def main():
     # TODO: Poder especificar fichero de salida para el CSV
     # TODO: Implementar --fastcsv
     # TODO: Hacer que --fastcsv sea incompatible con --ignore
+    # TODO: Opción para no generar ficheros de hash en carpetas vacías
 
     args = parser.parse_args()
     path = Path(args.path)
