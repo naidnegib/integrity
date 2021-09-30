@@ -1,5 +1,6 @@
 # integrity.py
 # Create/check files parity recursively
+import sys
 import argparse
 import os
 import hashlib
@@ -36,8 +37,8 @@ INTEGRITY_CHECKSUM_FILENAME_CSV = "ck++.csv"
 TXT_PROG = INTEGRITY_DESC
 TXT_DESCRIPTION = "Create and check integrity checksums for files in folder"
 
-TXT_HELP_ABSOLUTE_PATH = "Save absolute path when checksum was created"
-TXT_HELP_CSV = "Generate a CSV file (tab separated) detailing all the files processed"
+TXT_HELP_ABSOLUTE_PATH = "Save absolute path when checksum is created"
+TXT_HELP_CSV = "Generate a CSV file (; delimited) detailing all the files processed"
 TXT_HELP_CSV_FAST = "Generate a CSV file detailing all the files already processed (use hash files)"
 TXT_HELP_DEBUG = "Debug mode"
 TXT_HELP_JSON = "Check/Save checksumg file using JSON format instead of YAML"
@@ -68,6 +69,12 @@ TXT_O_FILES_CHANGED = "File '%s' changed! From: '%s' to: '%s'"
 
 TXT_E_ACCESS = "Error: '%s' failed to be accessed"
 TXT_E_FILES_WRITING_OUTPUT = "Error: Can't write to %s"
+TXT_E_FILES_INFO_READ = "Error: While retrieving info for file '%s'. It may indicate a file system error!"
+
+# Tool function to print to stderr
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+
 
 # Function used to generate the checksum / hash of the file
 def sha256_checksum(filename, block_size=65536):
@@ -113,7 +120,7 @@ def saveCurrentHash(path, json_, current, verbose=False, debug=False):
         f.close()
         if verbose: print (TXT_V_FILES_OUTPUT_OK % (output_file))
     except:
-        print (TXT_E_FILES_WRITING_OUTPUT % (path))
+        eprint (TXT_E_FILES_WRITING_OUTPUT % (path))
         ok = False
     return ok
 
@@ -133,7 +140,7 @@ def processFolder(path, args, csv_file):
     try:
         files = os.listdir(path)
     except:
-        print (TXT_E_ACCESS % (args.path))
+        eprint (TXT_E_ACCESS % (args.path))
         exit(-1)
     
     input = {} if args.ignore else loadPreviousHash(path, args.json, args.verbose, args.debug)
@@ -161,12 +168,26 @@ def processFolder(path, args, csv_file):
         if not os.path.isdir(file):
             if args.verbose: print (TXT_V_FILES_FILE % (filename))
 
+            file_size = 0
+            file_creation = ""
+            file_change = ""
+            file_hash = ""
+
+            try:
+            # I/O operations may raise exceptions due to file system defects!!!
+                file_hash = sha256_checksum(file)
+                file_size = os.path.getsize(file)
+                file_creation = datetime.fromtimestamp(os.path.getctime(file), tz=time_zone)
+                file_change = datetime.fromtimestamp(os.path.getmtime(file), tz=time_zone)
+            except:
+                eprint (TXT_E_FILES_INFO_READ % (file))
+
             resource = {
                 KEY_FILENAME: filename,
-                KEY_FILESIZE: os.path.getsize(file),
-                KEY_FILECREATIONDATE: datetime.fromtimestamp(os.path.getctime(file), tz=time_zone),
-                KEY_FILECHANGEDATE: datetime.fromtimestamp(os.path.getmtime(file), tz=time_zone),
-                KEY_SHA256: sha256_checksum(file)}
+                KEY_FILESIZE: file_size,
+                KEY_FILECREATIONDATE: file_creation,
+                KEY_FILECHANGEDATE: file_change,
+                KEY_SHA256: file_hash}
             resources[filename]=resource
 
             # Check if the item is already hashed, then alert and save history!
@@ -217,7 +238,7 @@ def main():
     parser.add_argument('-d', '--debug', action='store_true', help=TXT_HELP_DEBUG)
     # TODO: Hacer que el verbose sea un nivel de 0 a X en vez de valores (verbose, debug, ...)
     # TODO: Poder especificar fichero de salida para el CSV
-    # TODO: Implementar --csv y --fastcsv
+    # TODO: Implementar --fastcsv
     # TODO: Hacer que --fastcsv sea incompatible con --ignore
 
     args = parser.parse_args()
@@ -225,7 +246,7 @@ def main():
     try:
         csv_file = open(INTEGRITY_CHECKSUM_FILENAME_CSV,"w")
     except:
-        print (TXT_E_FILES_WRITING_OUTPUT % (INTEGRITY_CHECKSUM_FILENAME_CSV))
+        eprint (TXT_E_FILES_WRITING_OUTPUT % (INTEGRITY_CHECKSUM_FILENAME_CSV))
         csv_file = open(os.devnull,"w")
         args.csv = False
 
