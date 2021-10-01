@@ -14,6 +14,7 @@ from io import StringIO
 time_zone = None
 
 
+# Constants and strings
 INTEGRITY_DEFAULT_ENCODING = 'utf8'
 INTEGRITY_DESC = "IntegrityChecker"
 INTEGRITY_TYPE = "ChecksumInventory"
@@ -28,7 +29,7 @@ KEY_FILE_NAME = "file"
 KEY_FILE_SIZE = "size"
 KEY_FILE_CHANGED_DATE = "changed"
 KEY_FILE_CREATION_DATE = "date"
-KEY_FILE_CHECK_DATE = "checked"   # Date when this file was used to check all the files listed within
+KEY_FILE_CHECK_DATE = "checked"   # Date when the hash file was used to check all the files listed within
 KEY_PATH = "path"
 KEY_PREVIOUS_VALUE = "previous"
 KEY_RESOURCES = "resources"
@@ -36,7 +37,9 @@ KEY_HASH = "sha256"
 KEY_TYPE = "type"
 KEY_VERSION = "version"
 
-VALUE_HASH_NOT_READ = "ERROR!"
+VALUE_HASH_NOT_READ = "NULL"
+VALUE_STRING_NOT_FOUND = ""
+VALUE_INT_NOT_FOUND = 0
 
 TXT_PROG = INTEGRITY_DESC
 TXT_DESCRIPTION = "Create and check integrity checksums and hashes for files in folder"
@@ -68,8 +71,9 @@ TXT_V_FILES_READING_INPUT = "Warning: '%s' can't read previous information"
 TXT_V_GENERATING_HASHES = "Generating hashes for directory: %s"
 TXT_V_PROCESSING_EXISTING_HASHES = "Processing already existing hashes for directory: %s"
 
-#TXT_O_CSV_LINE = "\"%s\"\t\"%s\"\t%s\t\"%s\"\t\"%s\"\t\"%s\"\t\"%s\"\t\"%s\"\t" # path, filename, size, changed, hash, oldhash, date, modification
-TXT_O_CSV_LINE = "\"%s\";\"%s\";%s;\"%s\";\"%s\";\"%s\";\"%s\";\"%s\"" # path, filename, size, changed, hash, oldhash, date, modification
+# CSV Entries: path, filename, size, changed, hash, oldhash, date, modification
+TXT_O_CSV_HEADER = "PATH;FILENAME;SIZE;CHANGED;HASH;PREV_HASH;DATE;MODIFICATION"
+TXT_O_CSV_LINE = "\"%s\";\"%s\";%s;\"%s\";\"%s\";\"%s\";\"%s\";\"%s\""
 
 TXT_O_FILES_CHANGED = "File '%s' changed! From: '%s' to: '%s'"
 
@@ -85,10 +89,14 @@ def eprint(*args, **kwargs):
 
 # Hash generation function
 def sha256_checksum(filename, block_size=65536):
-    sha256 = hashlib.sha256()
-    with open(filename, 'rb') as f:
-        for block in iter(lambda: f.read(block_size), b''):
-            sha256.update(block)
+    sha256 = hashlib.sha256()                   
+    try:
+        with open(filename, 'rb') as f:
+            for block in iter(lambda: f.read(block_size), b''):
+                sha256.update(block)
+    except:
+        eprint (TXT_E_ACCESS % (filename))
+        return VALUE_HASH_NOT_READ
     return sha256.hexdigest()
 
 
@@ -135,7 +143,8 @@ def saveCurrentHash(path, json_, current, verbose=False, debug=False):
 
 
 # Process an specific path according to the specified args
-def processFolder(path, args, csv_file):  
+def processFolder(path, args, csv_file):
+    # General initializations  
     output = {
     KEY_DESC: INTEGRITY_DESC,
     KEY_VERSION: INTEGRITY_VERSION,
@@ -147,15 +156,39 @@ def processFolder(path, args, csv_file):
 
     if args.verbose: print (TXT_V_GENERATING_HASHES % (os.path.splitdrive(path.absolute().as_posix())[1]))
 
+    # Access the path (if possible)
     try:
         files = os.listdir(path)
     except:
         eprint (TXT_E_ACCESS % (args.path))
-        exit(-1)
+        return
     
+    # Load already existing hash file in the required format
     input = {} if args.ignore else loadPreviousHash(path, args.json, args.verbose, args.debug)
-    previous_resources = input.get(KEY_RESOURCES)
+    previous_resources = input[KEY_RESOURCES] if KEY_RESOURCES in input else {}
 
+    #previous_resources = input.get(KEY_RESOURCES, default={}) # If there's no resources return {}
+
+    # Inspect and process previous hash file in case of --fastcsv option
+    if args.fastcsv:
+        for resource in previous_resources.values():
+            # Write a new CSV line, if requested
+            if args.debug: print(TXT_V_EXISTING_HASH % (resource))
+            if args.csv:  # path, filename, size, changed, hash, oldhash, date, modification
+                changed = KEY_PREVIOUS_VALUE in resource
+                old_hash = resource[KEY_PREVIOUS_VALUE][KEY_HASH] if changed else ""
+                print (TXT_O_CSV_LINE % 
+                    (path, 
+                    resource[KEY_FILE_NAME],
+                    resource[KEY_FILE_SIZE],
+                    changed, 
+                    resource[KEY_HASH], 
+                    old_hash, 
+                    resource[KEY_FILE_CREATION_DATE], 
+                    resource[KEY_FILE_CHANGED_DATE]), 
+                    file=csv_file)
+
+    # Process contents from the file system
     resources = {}
     subfolders = []
     file_count = len(files)
@@ -176,52 +209,54 @@ def processFolder(path, args, csv_file):
         old_hash = ""
 
         if not os.path.isdir(file):
-            if args.verbose: print (TXT_V_FILES_FILE % (filename))
+            if not args.fastcsv: # Do not process files if not required
+                if args.verbose: print (TXT_V_FILES_FILE % (filename))
 
-            file_size = 0
-            file_creation = datetime.now(tz=time_zone)
-            file_change = datetime.now(tz=time_zone)
-            file_hash = VALUE_HASH_NOT_READ
+                file_size = 0
+                file_creation = datetime.now(tz=time_zone)
+                file_change = datetime.now(tz=time_zone)
+                file_hash = VALUE_HASH_NOT_READ
 
-            try:
-            # I/O operations may raise exceptions due to file system defects!!!
-                file_hash = sha256_checksum(file)
-                file_size = os.path.getsize(file)
-                file_creation = datetime.fromtimestamp(os.path.getctime(file), tz=time_zone)
-                file_change = datetime.fromtimestamp(os.path.getmtime(file), tz=time_zone)
-            except:
-                eprint (TXT_E_FILES_INFO_READ % (file))
+                try:
+                # I/O operations may raise exceptions due to file system defects!!!
+                    file_hash = sha256_checksum(file)
+                    file_size = os.path.getsize(file)
+                    file_creation = datetime.fromtimestamp(os.path.getctime(file), tz=time_zone)
+                    file_change = datetime.fromtimestamp(os.path.getmtime(file), tz=time_zone)
+                except:
+                    eprint (TXT_E_FILES_INFO_READ % (file))
 
-            resource = {
-                KEY_FILE_NAME: filename,
-                KEY_FILE_SIZE: file_size,
-                KEY_FILE_CREATION_DATE: file_creation,
-                KEY_FILE_CHANGED_DATE: file_change,
-                KEY_HASH: file_hash}
-            resources[filename]=resource
+                resource = {
+                    KEY_FILE_NAME: filename,
+                    KEY_FILE_SIZE: file_size,
+                    KEY_FILE_CREATION_DATE: file_creation,
+                    KEY_FILE_CHANGED_DATE: file_change,
+                    KEY_HASH: file_hash}
+                resources[filename]=resource
 
-            # Check if the item is already hashed, then alert and save history!
-            try:
-                if previous_resources[filename][KEY_HASH] != resource[KEY_HASH]:
-                    file_changed = True
-                    old_hash = previous_resources[filename][KEY_HASH]
-                    print (TXT_O_FILES_CHANGED % (file, previous_resources[filename][KEY_HASH], resource[KEY_HASH]))
-                    if KEY_PREVIOUS_VALUE in previous_resources[filename]: previous_resources[filename].pop(KEY_PREVIOUS_VALUE)
+                # Check if the item is already hashed, then alert and save history!
+                try:
+                    if previous_resources[filename][KEY_HASH] != resource[KEY_HASH]:
+                        file_changed = True
+                        old_hash = previous_resources[filename][KEY_HASH]
+                        print (TXT_O_FILES_CHANGED % (file, previous_resources[filename][KEY_HASH], resource[KEY_HASH]))
+                        if KEY_PREVIOUS_VALUE in previous_resources[filename]: previous_resources[filename].pop(KEY_PREVIOUS_VALUE)
 
-                    resources[filename][KEY_PREVIOUS_VALUE]=previous_resources[filename]
-            except:
-                if args.verbose: print (TXT_V_FILE_NOT_HASHED % (filename))
+                        resources[filename][KEY_PREVIOUS_VALUE]=previous_resources[filename]
+                except:
+                    if args.verbose: print (TXT_V_FILE_NOT_HASHED % (filename))
 
-            # Write a new CSV line, if requested
-            if args.csv:  # path, filename, size, changed, hash, oldhash, date, modification
-                print(TXT_O_CSV_LINE % (path, resource[KEY_FILE_NAME], resource[KEY_FILE_SIZE], file_changed, resource[KEY_HASH], old_hash, resource[KEY_FILE_CREATION_DATE], resource[KEY_FILE_CHANGED_DATE]), file=csv_file)
+                # Write a new CSV line, if requested
+                if args.csv:  # path, filename, size, changed, hash, oldhash, date, modification
+                    print(TXT_O_CSV_LINE % (path, resource[KEY_FILE_NAME], resource[KEY_FILE_SIZE], file_changed, resource[KEY_HASH], old_hash, resource[KEY_FILE_CREATION_DATE], resource[KEY_FILE_CHANGED_DATE]), file=csv_file)
         else:
             if args.verbose: print (TXT_V_FILES_DIRECTORY % (filename))
             subfolders.append(file) # Queue for later processing, if recursive
     
     # Recap and save everything in this folder
-    output[KEY_RESOURCES] = resources
-    if not args.test: saveCurrentHash(path, args.json, output, args.verbose, args.debug)
+    if not args.fastcsv:
+        output[KEY_RESOURCES] = resources
+        if not args.test: saveCurrentHash(path, args.json, output, args.verbose, args.debug)
 
     # Memory clean-up
     output = resources = input = previous_resources = {}
@@ -234,64 +269,9 @@ def processFolder(path, args, csv_file):
     return
 
 
-# Process an specific path just by recovering existing hashes
-def processFolderHashes(path, args, csv_file):  
-
-    if args.verbose: print (TXT_V_PROCESSING_EXISTING_HASHES % (os.path.splitdrive(path.absolute().as_posix())[1]))
-
-    # Access the path
-    try:
-        files = os.listdir(path)
-    except:
-        eprint (TXT_E_ACCESS % (args.path))
-        return
-    
-    # Load already existing hash file in the required format
-    input = loadPreviousHash(path, args.json, args.verbose, args.debug)
-    previous_resources = input.get(KEY_RESOURCES) if KEY_RESOURCES in input else {}
-
-    # Inspect and process previous hash file
-    for resource in previous_resources:
-        # Write a new CSV line, if requested
-        if args.debug: print(TXT_V_EXISTING_HASH % (resource))
-        if args.csv:  # path, filename, size, changed, hash, oldhash, date, modification
-            changed = KEY_PREVIOUS_VALUE in resource
-            old_hash = resource[KEY_PREVIOUS_VALUE][KEY_HASH] if changed else ""
-            print(TXT_O_CSV_LINE % (path, resource[KEY_FILE_NAME], resource[KEY_FILE_SIZE], changed, resource[KEY_HASH], old_hash, resource[KEY_FILE_CREATION_DATE], resource[KEY_FILE_CHANGED_DATE]), file=csv_file)
-    
-    # Look for current folders
-    file_count = len(files)
-    subfolders = []
-    current = 0
-
-    if args.verbose: print (TXT_V_FILES_COUNT % (file_count))
-    
-    for filename in files:
-        current = current + 1
-        if args.verbose: print (TXT_V_FILES_CURRENT % (current, file_count))
-        
-        file = path / filename
-
-        if str(filename).startswith(".") and not args.all: 
-            if args.verbose: print (TXT_V_FILES_IGNORED_DOTFILE % (filename))
-            continue
-
-        if os.path.isdir(file):
-            if args.verbose: print (TXT_V_FILES_DIRECTORY % (filename))
-            subfolders.append(file) # Queue for later processing, if recursive   
-
-    # Memory clean-up
-    input = previous_resources = {}
-
-    # Process sub-folders
-    if args.recursive:
-        for folder in subfolders:
-            processFolderHashes (folder, args, csv_file)
-    
-    return
-
-
+## main ##
 def main():
+    # Parse command-line parameters and adjust values
     parser = argparse.ArgumentParser(description=TXT_DESCRIPTION, prog=TXT_PROG)
     group_csv = parser.add_mutually_exclusive_group()
     parser.add_argument('path', nargs='?', default=os.getcwd())
@@ -305,9 +285,6 @@ def main():
     parser.add_argument('-t', '--test', action='store_true', help=TXT_HELP_TEST)
     parser.add_argument('-v', '--verbose', action='store_true', help=TXT_HELP_VERBOSE)
     parser.add_argument('-d', '--debug', action='store_true', help=TXT_HELP_DEBUG)
-    # TODO: Hacer que el verbose sea un nivel de 0 a X en vez de valores (verbose, debug, ...)
-    # TODO: Poder especificar fichero de salida para el CSV
-    # TODO: Opción para no generar ficheros de hash en carpetas vacías
 
     args = parser.parse_args()
     path = Path(args.path)
@@ -320,16 +297,24 @@ def main():
     if args.csv:
         try:
             csv_file = open(INTEGRITY_HASH_FILENAME_CSV,"w", encoding=INTEGRITY_DEFAULT_ENCODING)
+            print(TXT_O_CSV_HEADER, file=csv_file)
         except:
             eprint (TXT_E_FILES_WRITING_OUTPUT % (INTEGRITY_HASH_FILENAME_CSV))
             csv_file = open(os.devnull,"w")
             args.csv = False
-    if args.fastcsv:
-        processFolderHashes (path, args, csv_file)  # Only process already existing files
-    else:
-        processFolder(path, args, csv_file)         # Process folders according to args
+
+    # Run process
+    processFolder(path, args, csv_file)
+
+    # Clean-up and close-up
     if args.csv: csv_file.close()
     
 
 if __name__ == '__main__':
     main()
+
+
+    # TODO: Hacer que el verbose sea un nivel de 0 a X en vez de valores (verbose, debug, ...)
+    # TODO: Poder especificar fichero de salida para el CSV
+    # TODO: Opción para no generar ficheros de hash en carpetas vacías
+    # TODO: Actualizar KEY_FILE_CHECK_DATE según proceda
