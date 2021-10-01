@@ -4,6 +4,7 @@ import sys
 import argparse
 import os
 import hashlib
+from typing import Any
 import yaml
 import json
 from datetime import datetime
@@ -12,6 +13,14 @@ from io import StringIO
 
 time_zone = None
 
+
+INTEGRITY_DEFAULT_ENCODING = 'utf8'
+INTEGRITY_DESC = "IntegrityChecker"
+INTEGRITY_TYPE = "ChecksumInventory"
+INTEGRITY_VERSION = "0.2"
+INTEGRITY_HASH_FILENAME = ".ck++.nfo"
+INTEGRITY_HASH_FILENAME_JSON = ".ck++.nfoj"
+INTEGRITY_HASH_FILENAME_CSV = "ck++.csv"
 
 KEY_CREATION = "creation"
 KEY_DESC = "generator" 
@@ -28,13 +37,6 @@ KEY_TYPE = "type"
 KEY_VERSION = "version"
 
 VALUE_HASH_NOT_READ = "ERROR!"
-
-INTEGRITY_DESC = "IntegrityChecker"
-INTEGRITY_TYPE = "ChecksumInventory"
-INTEGRITY_VERSION = "0.2"
-INTEGRITY_HASH_FILENAME = ".ck++.nfo"
-INTEGRITY_HASH_FILENAME_JSON = ".ck++.nfoj"
-INTEGRITY_HASH_FILENAME_CSV = "ck++.csv"
 
 TXT_PROG = INTEGRITY_DESC
 TXT_DESCRIPTION = "Create and check integrity checksums and hashes for files in folder"
@@ -97,7 +99,7 @@ def loadPreviousHash(path, json_, verbose=False, debug=False):
      
     try:
         input_file = str(os.path.join(path, filename))
-        f = open (input_file, "r")
+        f = open (input_file, "r", encoding=INTEGRITY_DEFAULT_ENCODING)
         input_str = f.read ()
         f.close()
         
@@ -122,7 +124,7 @@ def saveCurrentHash(path, json_, current, verbose=False, debug=False):
         
     try:
         output_file = str(os.path.join(path, filename))
-        f = open (output_file, "w")
+        f = open (output_file, "w", encoding=INTEGRITY_DEFAULT_ENCODING)
         f.write (output_str)
         f.close()
         if verbose: print (TXT_V_FILES_OUTPUT_OK % (output_file))
@@ -309,6 +311,7 @@ def main():
 
     args = parser.parse_args()
     path = Path(args.path)
+    csv_file = Any
 
     args.csv = True if args.fastcsv else args.csv
     
@@ -316,7 +319,7 @@ def main():
     if args.verbose: print (TXT_V_ARGS % (args))
     if args.csv:
         try:
-            csv_file = open(INTEGRITY_HASH_FILENAME_CSV,"w")
+            csv_file = open(INTEGRITY_HASH_FILENAME_CSV,"w", encoding=INTEGRITY_DEFAULT_ENCODING)
         except:
             eprint (TXT_E_FILES_WRITING_OUTPUT % (INTEGRITY_HASH_FILENAME_CSV))
             csv_file = open(os.devnull,"w")
