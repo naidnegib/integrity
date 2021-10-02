@@ -10,6 +10,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from io import StringIO
+from colorama import Fore #, Back, Style
 
 time_zone = None
 
@@ -52,6 +53,7 @@ TXT_HELP_JSON = "Check/Save hash file using JSON format instead of YAML"
 TXT_HELP_RECURSIVE = "Process subfolders recursively"
 TXT_HELP_IGNORE = "Ignore already stored hashes (avoid changes detection)"
 TXT_HELP_IGNORE_DOTS = "Include all. Do NOT ignore files and folders stating with dot (.)"
+TXT_HELP_OUTPUT = "Output CSV contents to specified file"
 TXT_HELP_TEST = "Test mode. Does NOT write updates to hash files"
 TXT_HELP_VERBOSE = "Verbose mode"
 
@@ -74,12 +76,11 @@ TXT_V_PROCESSING_EXISTING_HASHES = "Processing already existing hashes for direc
 # CSV Entries: path, filename, size, changed, hash, oldhash, date, modification
 TXT_O_CSV_HEADER = "PATH;FILENAME;SIZE;CHANGED;HASH;PREV_HASH;DATE;MODIFICATION"
 TXT_O_CSV_LINE = "\"%s\";\"%s\";%s;\"%s\";\"%s\";\"%s\";\"%s\";\"%s\""
+TXT_O_FILES_CHANGED = Fore.YELLOW + "[CHANGE] " + Fore.RESET + "File '%s' changed! From: '%s' to: '%s'"
 
-TXT_O_FILES_CHANGED = "File '%s' changed! From: '%s' to: '%s'"
-
-TXT_E_ACCESS = "Error: '%s' failed to be accessed"
-TXT_E_FILES_WRITING_OUTPUT = "Error: Can't write to %s"
-TXT_E_FILES_INFO_READ = "Error: While retrieving info for file '%s'. It may indicate a file system error!"
+TXT_E_ACCESS = Fore.RED + "[ERROR] " + Fore.RESET + "'%s' failed to be accessed"
+TXT_E_FILES_WRITING_OUTPUT = Fore.RED + "[ERROR] " + Fore.RESET + "Can't write to %s"
+TXT_E_FILES_INFO_READ = Fore.RED + "[ERROR] " + Fore.RESET + "While retrieving info for file '%s'. It may indicate a file system error!"
 
 
 # Tool function to print to stderr
@@ -149,7 +150,7 @@ def processFolder(path, args, csv_file):
     KEY_DESC: INTEGRITY_DESC,
     KEY_VERSION: INTEGRITY_VERSION,
     KEY_TYPE: INTEGRITY_TYPE,
-    KEY_CREATION: datetime.now(tz=time_zone)
+    KEY_FILE_CHECK_DATE: datetime.now(tz=time_zone)
     }
 
     output[KEY_PATH] = path.absolute().as_posix() if args.absolutepath else os.path.splitdrive(path.absolute().as_posix())[1]
@@ -167,6 +168,7 @@ def processFolder(path, args, csv_file):
     input = {} if args.ignore else loadPreviousHash(path, args.json, args.verbose, args.debug)
     previous_resources = input[KEY_RESOURCES] if KEY_RESOURCES in input else {}
 
+    output[KEY_CREATION] = input[KEY_CREATION] if KEY_CREATION in input else datetime.now(tz=time_zone)
     #previous_resources = input.get(KEY_RESOURCES, default={}) # If there's no resources return {}
 
     # Inspect and process previous hash file in case of --fastcsv option
@@ -281,6 +283,7 @@ def main():
     parser.add_argument('-j', '--json', action='store_true', help=TXT_HELP_JSON)
     group_csv.add_argument('-c', '--csv', action='store_true', help=TXT_HELP_CSV)
     group_csv.add_argument('-f', '--fastcsv', action='store_true', help=TXT_HELP_CSV_FAST)
+    parser.add_argument('-o', '--output', type=str, default=INTEGRITY_HASH_FILENAME_CSV, help=TXT_HELP_OUTPUT)
     parser.add_argument('-i', '--ignore', action='store_true', help=TXT_HELP_IGNORE)
     parser.add_argument('-t', '--test', action='store_true', help=TXT_HELP_TEST)
     parser.add_argument('-v', '--verbose', action='store_true', help=TXT_HELP_VERBOSE)
@@ -296,10 +299,10 @@ def main():
     if args.verbose: print (TXT_V_ARGS % (args))
     if args.csv:
         try:
-            csv_file = open(INTEGRITY_HASH_FILENAME_CSV,"w", encoding=INTEGRITY_DEFAULT_ENCODING)
+            csv_file = open(args.output,"w", encoding=INTEGRITY_DEFAULT_ENCODING)
             print(TXT_O_CSV_HEADER, file=csv_file)
         except:
-            eprint (TXT_E_FILES_WRITING_OUTPUT % (INTEGRITY_HASH_FILENAME_CSV))
+            eprint (TXT_E_FILES_WRITING_OUTPUT % (args.output))
             csv_file = open(os.devnull,"w")
             args.csv = False
 
