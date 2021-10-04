@@ -19,7 +19,7 @@ time_zone = None
 INTEGRITY_DEFAULT_ENCODING = 'utf8'
 INTEGRITY_DESC = "IntegrityChecker"
 INTEGRITY_TYPE = "ChecksumInventory"
-INTEGRITY_VERSION = "0.4"
+INTEGRITY_VERSION = "0.3"
 INTEGRITY_HASH_FILENAME = ".ck++.nfo"
 INTEGRITY_HASH_FILENAME_JSON = ".ck++.nfoj"
 INTEGRITY_HASH_FILENAME_CSV = "ck++.csv"
@@ -306,7 +306,7 @@ def main():
 
     if args.version:
         print(TXT_O_VERSION % (INTEGRITY_DESC, INTEGRITY_VERSION))
-        exit (0)
+        return
 
     args.csv = True if args.fastcsv else args.csv
     
