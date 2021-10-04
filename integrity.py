@@ -19,7 +19,7 @@ time_zone = None
 INTEGRITY_DEFAULT_ENCODING = 'utf8'
 INTEGRITY_DESC = "IntegrityChecker"
 INTEGRITY_TYPE = "ChecksumInventory"
-INTEGRITY_VERSION = "0.3"
+INTEGRITY_VERSION = "0.4"
 INTEGRITY_HASH_FILENAME = ".ck++.nfo"
 INTEGRITY_HASH_FILENAME_JSON = ".ck++.nfoj"
 INTEGRITY_HASH_FILENAME_CSV = "ck++.csv"
@@ -57,6 +57,7 @@ TXT_HELP_IGNORE_DOTS = "Include all. Do NOT ignore files and folders stating wit
 TXT_HELP_OUTPUT = "Output CSV contents to specified file"
 TXT_HELP_TEST = "Test mode. Does NOT write updates to hash files"
 TXT_HELP_VERBOSE = "Verbose mode"
+TXT_HELP_VERSION = "Print current version and exits"
 
 TXT_V_ARGS = "Arguments detected: %s"
 TXT_V_EXISTING_HASH = "%s"
@@ -78,6 +79,7 @@ TXT_V_PROCESSING_EXISTING_HASHES = "Processing already existing hashes for direc
 TXT_O_CSV_HEADER = "PATH;FILENAME;SIZE;CHANGED;HASH;PREV_HASH;DATE;MODIFICATION"
 TXT_O_CSV_LINE = "\"%s\";\"%s\";%s;\"%s\";\"%s\";\"%s\";\"%s\";\"%s\""
 TXT_O_FILES_CHANGED = Fore.YELLOW + "[CHANGE] " + Fore.RESET + "File '%s' changed! From: '%s' to: '%s'"
+TXT_O_VERSION = "%s Version %s"
 
 TXT_E_ACCESS = Fore.RED + "[ERROR] " + Fore.RESET + "'%s' failed to be accessed"
 TXT_E_FILES_WRITING_OUTPUT = Fore.RED + "[ERROR] " + Fore.RESET + "Can't write to %s"
@@ -295,11 +297,16 @@ def main():
     parser.add_argument('-i', '--ignore', action='store_true', help=TXT_HELP_IGNORE)
     parser.add_argument('-t', '--test', action='store_true', help=TXT_HELP_TEST)
     parser.add_argument('-v', '--verbose', action='store_true', help=TXT_HELP_VERBOSE)
+    parser.add_argument('-V', '--version', action='store_true', help=TXT_HELP_VERSION)
     parser.add_argument('-d', '--debug', action='store_true', help=TXT_HELP_DEBUG)
 
     args = parser.parse_args()
     path = Path(args.path)
     csv_file = Any
+
+    if args.version:
+        print(TXT_O_VERSION % (INTEGRITY_DESC, INTEGRITY_VERSION))
+        exit (0)
 
     args.csv = True if args.fastcsv else args.csv
     
