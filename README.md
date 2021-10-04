@@ -6,8 +6,8 @@ This command is intended to be used along backup scripts to detect changes and b
 ## Usage
 
 ```
-usage: IntegrityChecker [-h] [-p] [-a] [-r] [-j] [-c | -f] [-o OUTPUT] [-i]
-                        [-t] [-v] [-d]
+usage: IntegrityChecker [-h] [-p] [-a] [-e] [-r] [-j] [-c | -f] [-o OUTPUT]
+                        [-i] [-t] [-v] [-d]
                         [path]
 
 Create and check integrity checksums and hashes for files in folder
@@ -20,6 +20,8 @@ optional arguments:
   -p, --absolutepath    Save absolute path
   -a, --all             Include all. Do NOT ignore files and folders stating
                         with dot (.)
+  -e, --empty           Do not write hash files into empty folders (leaving
+                        them empty)
   -r, --recursive       Process subfolders recursively
   -j, --json            Check/Save hash file using JSON format instead of YAML
   -c, --csv             Generate a CSV file (; delimited) detailing all the

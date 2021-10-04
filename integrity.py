@@ -19,7 +19,7 @@ time_zone = None
 INTEGRITY_DEFAULT_ENCODING = 'utf8'
 INTEGRITY_DESC = "IntegrityChecker"
 INTEGRITY_TYPE = "ChecksumInventory"
-INTEGRITY_VERSION = "0.2"
+INTEGRITY_VERSION = "0.3"
 INTEGRITY_HASH_FILENAME = ".ck++.nfo"
 INTEGRITY_HASH_FILENAME_JSON = ".ck++.nfoj"
 INTEGRITY_HASH_FILENAME_CSV = "ck++.csv"
@@ -49,6 +49,7 @@ TXT_HELP_ABSOLUTE_PATH = "Save absolute path"
 TXT_HELP_CSV = "Generate a CSV file (; delimited) detailing all the files processed"
 TXT_HELP_CSV_FAST = "Generate a CSV file detailing all the files already processed (use hash files)"
 TXT_HELP_DEBUG = "Debug mode"
+TXT_HELP_EMPTY = "Do not write hash files into empty folders (leaving them empty)"
 TXT_HELP_JSON = "Check/Save hash file using JSON format instead of YAML"
 TXT_HELP_RECURSIVE = "Process subfolders recursively"
 TXT_HELP_IGNORE = "Ignore already stored hashes (avoid changes detection)"
@@ -258,7 +259,13 @@ def processFolder(path, args, csv_file):
     # Recap and save everything in this folder
     if not args.fastcsv:
         output[KEY_RESOURCES] = resources
-        if not args.test: saveCurrentHash(path, args.json, output, args.verbose, args.debug)
+
+        is_to_write = not args.test                             # If we are testing the file is not written
+        is_empty_folder = len(resources) == 0 and args.empty    # Do not write empty folders with --empty
+        is_to_write = is_to_write and not is_empty_folder
+
+        if is_to_write:
+            saveCurrentHash(path, args.json, output, args.verbose, args.debug)
 
     # Memory clean-up
     output = resources = input = previous_resources = {}
@@ -279,6 +286,7 @@ def main():
     parser.add_argument('path', nargs='?', default=os.getcwd())
     parser.add_argument('-p', '--absolutepath', action='store_true', help=TXT_HELP_ABSOLUTE_PATH)
     parser.add_argument('-a', '--all', action='store_true', help=TXT_HELP_IGNORE_DOTS)
+    parser.add_argument('-e', '--empty', action='store_true', help=TXT_HELP_EMPTY)
     parser.add_argument('-r', '--recursive', action='store_true', help=TXT_HELP_RECURSIVE)
     parser.add_argument('-j', '--json', action='store_true', help=TXT_HELP_JSON)
     group_csv.add_argument('-c', '--csv', action='store_true', help=TXT_HELP_CSV)
@@ -318,6 +326,3 @@ if __name__ == '__main__':
 
 
     # TODO: Hacer que el verbose sea un nivel de 0 a X en vez de valores (verbose, debug, ...)
-    # TODO: Poder especificar fichero de salida para el CSV
-    # TODO: Opción para no generar ficheros de hash en carpetas vacías
-    # TODO: Actualizar KEY_FILE_CHECK_DATE según proceda
