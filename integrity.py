@@ -19,9 +19,9 @@ time_zone = None
 INTEGRITY_DEFAULT_ENCODING = 'utf8'
 INTEGRITY_DESC = "IntegrityChecker"
 INTEGRITY_TYPE = "ChecksumInventory"
-INTEGRITY_VERSION = "0.3"
+INTEGRITY_VERSION = "0.4"
 INTEGRITY_HASH_FILENAME = ".ck++.nfo"
-INTEGRITY_HASH_FILENAME_JSON = ".ck++.nfoj"
+INTEGRITY_HASH_FILENAME_JSON = ".ck++.json.nfo"
 INTEGRITY_HASH_FILENAME_CSV = "ck++.csv"
 
 KEY_CREATION = "creation"
@@ -42,19 +42,24 @@ VALUE_HASH_NOT_READ = "NULL"
 VALUE_STRING_NOT_FOUND = ""
 VALUE_INT_NOT_FOUND = 0
 
+VALUE_VERBOSE_INFO = 1
+VALUE_VERBOSE_DETAIL = 2
+VALUE_VERBOSE_DEBUG = 3
+
 TXT_PROG = INTEGRITY_DESC
 TXT_DESCRIPTION = "Create and check integrity checksums and hashes for files in folder"
 
 TXT_HELP_ABSOLUTE_PATH = "Save absolute path"
 TXT_HELP_CSV = "Generate a CSV file (; delimited) detailing all the files processed"
 TXT_HELP_CSV_FAST = "Generate a CSV file detailing all the files already processed (use hash files)"
-TXT_HELP_DEBUG = "Debug mode"
+TXT_HELP_DEBUG = "Debug level: 1: Verbose (--verbose); 2: Detailed; 3: Debug"
 TXT_HELP_EMPTY = "Do not write hash files into empty folders (leaving them empty)"
 TXT_HELP_JSON = "Check/Save hash file using JSON format instead of YAML"
 TXT_HELP_RECURSIVE = "Process subfolders recursively"
 TXT_HELP_IGNORE = "Ignore already stored hashes (avoid changes detection)"
 TXT_HELP_IGNORE_DOTS = "Include all. Do NOT ignore files and folders stating with dot (.)"
-TXT_HELP_OUTPUT = "Output CSV contents to specified file"
+TXT_HELP_OUTPUT = "Output CSV contents to specified file. Ignored if a CSV argument is not present."
+TXT_HELP_SUMMARY = "Print a summary of processed files when finish"
 TXT_HELP_TEST = "Test mode. Does NOT write updates to hash files"
 TXT_HELP_VERBOSE = "Verbose mode"
 TXT_HELP_VERSION = "Print current version and exits"
@@ -78,13 +83,32 @@ TXT_V_PROCESSING_EXISTING_HASHES = "Processing already existing hashes for direc
 # CSV Entries: path, filename, size, changed, hash, oldhash, date, modification
 TXT_O_CSV_HEADER = "PATH;FILENAME;SIZE;CHANGED;HASH;PREV_HASH;DATE;MODIFICATION"
 TXT_O_CSV_LINE = "\"%s\";\"%s\";%s;\"%s\";\"%s\";\"%s\";\"%s\";\"%s\""
-TXT_O_FILES_CHANGED = Fore.YELLOW + "[CHANGE] " + Fore.RESET + "File '%s' changed! From: '%s' to: '%s'"
+
+TXT_O_FILES_CHANGED = Fore.YELLOW + "[CHANGE] " + Fore.RESET + "File '%s' changed from: '%s' to: '%s'"
+TXT_O_FILES_NEW =  Fore.BLUE + "[NEW] " + Fore.RESET + "File '%s' hashed: '%s'"
+TXT_O_FILES_NOT_CHANGED = Fore.GREEN + "[OK] " + Fore.RESET + "File '%s' hashed: '%s'"
+TXT_O_SUMMARY_FILES =           "=============================\n SUMMARY OF PROCESSED FILES\n============================="
+TXT_O_SUMMARY_FILES_CHANGED =   "Files " + Fore.YELLOW + "[CHANGE]   " + Fore.RESET + "%12d"
+TXT_O_SUMMARY_FILES_ERRORS =    "Files " + Fore.RED +    "[ERROR]    " + Fore.RESET + "%12d"
+TXT_O_SUMMARY_FILES_IGNORED =   "Files " +               "[Ignored]  " +              "%12d"
+TXT_O_SUMMARY_FILES_NEW =       "Files " + Fore.BLUE +   "[NEW]      " + Fore.RESET + "%12d"
+TXT_O_SUMMARY_FILES_UNCHANGED = "Files " + Fore.GREEN +  "[OK]       " + Fore.RESET + "%12d"
+
 TXT_O_VERSION = "%s Version %s"
 
 TXT_E_ACCESS = Fore.RED + "[ERROR] " + Fore.RESET + "'%s' failed to be accessed"
 TXT_E_FILES_WRITING_OUTPUT = Fore.RED + "[ERROR] " + Fore.RESET + "Can't write to %s"
 TXT_E_FILES_INFO_READ = Fore.RED + "[ERROR] " + Fore.RESET + "While retrieving info for file '%s'. It may indicate a file system error!"
 
+
+class Summary:
+    unchanged = 0
+    new = 0
+    changed = 0
+    ignored = 0
+    errors = 0
+
+summary_files = Summary()
 
 # Tool function to print to stderr
 def eprint(*args, **kwargs):
@@ -105,9 +129,9 @@ def sha256_checksum(filename, block_size=65536):
 
 
 # Search for previous values and return them as a dictionary
-def loadPreviousHash(path, json_, verbose=False, debug=False):
+def loadPreviousHash(path, args):
     previous = {}
-    filename = INTEGRITY_HASH_FILENAME_JSON if json_ else INTEGRITY_HASH_FILENAME
+    filename = INTEGRITY_HASH_FILENAME_JSON if args.json else INTEGRITY_HASH_FILENAME
      
     try:
         input_file = str(os.path.join(path, filename))
@@ -115,31 +139,31 @@ def loadPreviousHash(path, json_, verbose=False, debug=False):
         input_str = f.read ()
         f.close()
         
-        if verbose: print (TXT_V_FILES_INPUT_OK % (input_file))
+        if args.debuglevel >= VALUE_VERBOSE_INFO:  print (TXT_V_FILES_INPUT_OK % (input_file))
 
-        previous = json.loads(input_str) if json_ else yaml.safe_load(input_str)
+        previous = json.loads(input_str) if args.json else yaml.safe_load(input_str)
 
-        if debug: print(TXT_V_FILES_INPUT_CONTENTS % (input_file, previous))
+        if args.debuglevel >= VALUE_VERBOSE_DEBUG: print(TXT_V_FILES_INPUT_CONTENTS % (input_file, previous))
     except:
-        if debug: print (TXT_V_FILES_READING_INPUT % (path))
+        if args.debuglevel >= VALUE_VERBOSE_DEBUG: print (TXT_V_FILES_READING_INPUT % (path))
 
     return previous
 
 
 # Save current hashes
-def saveCurrentHash(path, json_, current, verbose=False, debug=False):
+def saveCurrentHash(path, args, current_hash_obj):
     ok = True
-    filename = INTEGRITY_HASH_FILENAME_JSON if json_ else INTEGRITY_HASH_FILENAME
-    output_str = json.dumps(current, indent=4, sort_keys=True, default=str) if json_ else yaml.dump(current, default_flow_style=False)    
+    filename = INTEGRITY_HASH_FILENAME_JSON if args.json else INTEGRITY_HASH_FILENAME
+    output_str = json.dumps(current_hash_obj, indent=4, sort_keys=True, default=str) if args.json else yaml.dump(current_hash_obj, default_flow_style=False)    
 
-    if debug: print (TXT_V_FILES_OUTPUT_CONTENTS % (filename, output_str))
+    if args.debuglevel >= VALUE_VERBOSE_DEBUG: print (TXT_V_FILES_OUTPUT_CONTENTS % (filename, output_str))
         
     try:
         output_file = str(os.path.join(path, filename))
         f = open (output_file, "w", encoding=INTEGRITY_DEFAULT_ENCODING)
         f.write (output_str)
         f.close()
-        if verbose: print (TXT_V_FILES_OUTPUT_OK % (output_file))
+        if args.debuglevel >= VALUE_VERBOSE_INFO: print (TXT_V_FILES_OUTPUT_OK % (output_file))
     except:
         eprint (TXT_E_FILES_WRITING_OUTPUT % (path))
         ok = False
@@ -158,7 +182,7 @@ def processFolder(path, args, csv_file):
 
     output[KEY_PATH] = path.absolute().as_posix() if args.absolutepath else os.path.splitdrive(path.absolute().as_posix())[1]
 
-    if args.verbose: print (TXT_V_GENERATING_HASHES % (os.path.splitdrive(path.absolute().as_posix())[1]))
+    if args.debuglevel >= VALUE_VERBOSE_INFO: print (TXT_V_GENERATING_HASHES % (os.path.splitdrive(path.absolute().as_posix())[1]))
 
     # Access the path (if possible)
     try:
@@ -168,7 +192,7 @@ def processFolder(path, args, csv_file):
         return
     
     # Load already existing hash file in the required format
-    input = {} if args.ignore else loadPreviousHash(path, args.json, args.verbose, args.debug)
+    input = {} if args.ignore else loadPreviousHash(path, args)
     previous_resources = input[KEY_RESOURCES] if KEY_RESOURCES in input else {}
 
     output[KEY_CREATION] = input[KEY_CREATION] if KEY_CREATION in input else datetime.now(tz=time_zone)
@@ -178,7 +202,7 @@ def processFolder(path, args, csv_file):
     if args.fastcsv:
         for resource in previous_resources.values():
             # Write a new CSV line, if requested
-            if args.debug: print(TXT_V_EXISTING_HASH % (resource))
+            if args.debuglevel >= VALUE_VERBOSE_DEBUG: print(TXT_V_EXISTING_HASH % (resource))
             if args.csv:  # path, filename, size, changed, hash, oldhash, date, modification
                 changed = KEY_PREVIOUS_VALUE in resource
                 old_hash = resource[KEY_PREVIOUS_VALUE][KEY_HASH] if changed else ""
@@ -198,15 +222,16 @@ def processFolder(path, args, csv_file):
     subfolders = []
     file_count = len(files)
 
-    if args.verbose: print (TXT_V_FILES_COUNT % (file_count))
+    if args.debuglevel >= VALUE_VERBOSE_INFO: print (TXT_V_FILES_COUNT % (file_count))
 
     current = 0
     for filename in files:
         current = current + 1
-        if args.verbose: print (TXT_V_FILES_CURRENT % (current, file_count))
+        if args.debuglevel >= VALUE_VERBOSE_INFO: print (TXT_V_FILES_CURRENT % (current, file_count))
 
         if str(filename).startswith(".") and not args.all: 
-            if args.verbose: print (TXT_V_FILES_IGNORED_DOTFILE % (filename))
+            if args.debuglevel >= VALUE_VERBOSE_INFO: print (TXT_V_FILES_IGNORED_DOTFILE % (filename))
+            summary_files.ignored += 1 # TODO: Detect if it's a file or folder
             continue
         
         file = path / filename
@@ -215,12 +240,14 @@ def processFolder(path, args, csv_file):
 
         if not os.path.isdir(file):
             if not args.fastcsv: # Do not process files if not required
-                if args.verbose: print (TXT_V_FILES_FILE % (filename))
+                if args.debuglevel >= VALUE_VERBOSE_INFO: print (TXT_V_FILES_FILE % (filename))
 
                 file_size = 0
                 file_creation = datetime.now(tz=time_zone)
                 file_change = datetime.now(tz=time_zone)
                 file_hash = VALUE_HASH_NOT_READ
+                file_already_hashed = False
+                old_hash = ""
 
                 try:
                 # I/O operations may raise exceptions due to file system defects!!!
@@ -230,6 +257,7 @@ def processFolder(path, args, csv_file):
                     file_change = datetime.fromtimestamp(os.path.getmtime(file), tz=time_zone)
                 except:
                     eprint (TXT_E_FILES_INFO_READ % (file))
+                    summary_files.errors += 1
 
                 resource = {
                     KEY_FILE_NAME: filename,
@@ -241,21 +269,32 @@ def processFolder(path, args, csv_file):
 
                 # Check if the item is already hashed, then alert and save history!
                 try:
+                    file_already_hashed = True if filename in previous_resources else False
                     if previous_resources[filename][KEY_HASH] != resource[KEY_HASH]:
                         file_changed = True
                         old_hash = previous_resources[filename][KEY_HASH]
-                        print (TXT_O_FILES_CHANGED % (file, previous_resources[filename][KEY_HASH], resource[KEY_HASH]))
+                        # print (TXT_O_FILES_CHANGED % (file, previous_resources[filename][KEY_HASH], resource[KEY_HASH]))
                         if KEY_PREVIOUS_VALUE in previous_resources[filename]: previous_resources[filename].pop(KEY_PREVIOUS_VALUE)
 
                         resources[filename][KEY_PREVIOUS_VALUE]=previous_resources[filename]
                 except:
-                    if args.verbose: print (TXT_V_FILE_NOT_HASHED % (filename))
+                    if args.debuglevel >= VALUE_VERBOSE_INFO: print (TXT_V_FILE_NOT_HASHED % (filename))
+
+                if file_changed:                                                # CHANGED File / Hash
+                    print(TXT_O_FILES_CHANGED % (file, old_hash, file_hash))
+                    summary_files.changed += 1
+                elif file_already_hashed:                                       # SAME Hash
+                    print(TXT_O_FILES_NOT_CHANGED % (file, file_hash))
+                    summary_files.unchanged += 1
+                else:                                                           # NEW File
+                    print(TXT_O_FILES_NEW % (file, file_hash))
+                    summary_files.new += 1
 
                 # Write a new CSV line, if requested
                 if args.csv:  # path, filename, size, changed, hash, oldhash, date, modification
                     print(TXT_O_CSV_LINE % (path, resource[KEY_FILE_NAME], resource[KEY_FILE_SIZE], file_changed, resource[KEY_HASH], old_hash, resource[KEY_FILE_CREATION_DATE], resource[KEY_FILE_CHANGED_DATE]), file=csv_file)
         else:
-            if args.verbose: print (TXT_V_FILES_DIRECTORY % (filename))
+            if args.debuglevel >= VALUE_VERBOSE_INFO: print (TXT_V_FILES_DIRECTORY % (filename))
             subfolders.append(file) # Queue for later processing, if recursive
     
     # Recap and save everything in this folder
@@ -267,7 +306,7 @@ def processFolder(path, args, csv_file):
         is_to_write = is_to_write and not is_empty_folder
 
         if is_to_write:
-            saveCurrentHash(path, args.json, output, args.verbose, args.debug)
+            saveCurrentHash(path, args, output)
 
     # Memory clean-up
     output = resources = input = previous_resources = {}
@@ -286,6 +325,7 @@ def main():
     parser = argparse.ArgumentParser(description=TXT_DESCRIPTION, prog=TXT_PROG)
     group_csv = parser.add_mutually_exclusive_group()
     parser.add_argument('path', nargs='?', default=os.getcwd())
+    parser.add_argument('-V', '--version', action='store_true', help=TXT_HELP_VERSION)
     parser.add_argument('-p', '--absolutepath', action='store_true', help=TXT_HELP_ABSOLUTE_PATH)
     parser.add_argument('-a', '--all', action='store_true', help=TXT_HELP_IGNORE_DOTS)
     parser.add_argument('-e', '--empty', action='store_true', help=TXT_HELP_EMPTY)
@@ -293,12 +333,14 @@ def main():
     parser.add_argument('-j', '--json', action='store_true', help=TXT_HELP_JSON)
     group_csv.add_argument('-c', '--csv', action='store_true', help=TXT_HELP_CSV)
     group_csv.add_argument('-f', '--fastcsv', action='store_true', help=TXT_HELP_CSV_FAST)
+    #parser.add_argument('-H', '--hash', type=str, choices=["md5", "sha256", "sha3_256", "shake_256", "blake2s"], default="sha256", help=TXT_HELP_HASH) # Hashing algorithm
     parser.add_argument('-o', '--output', type=str, default=INTEGRITY_HASH_FILENAME_CSV, help=TXT_HELP_OUTPUT)
     parser.add_argument('-i', '--ignore', action='store_true', help=TXT_HELP_IGNORE)
     parser.add_argument('-t', '--test', action='store_true', help=TXT_HELP_TEST)
+    parser.add_argument('-s', '--summary', action='store_true', help=TXT_HELP_SUMMARY) # Print a summary after processing hashes
+    #parser.add_argument('-g', '--gaps', action='store_true', help=TXT_HELP_GAPS) # Process non-hashed files only
     parser.add_argument('-v', '--verbose', action='store_true', help=TXT_HELP_VERBOSE)
-    parser.add_argument('-V', '--version', action='store_true', help=TXT_HELP_VERSION)
-    parser.add_argument('-d', '--debug', action='store_true', help=TXT_HELP_DEBUG)
+    parser.add_argument('-d', '--debuglevel', type=int, choices=[1, 2, 3], default=0, help=TXT_HELP_DEBUG)
 
     args = parser.parse_args()
     path = Path(args.path)
@@ -309,9 +351,9 @@ def main():
         return
 
     args.csv = True if args.fastcsv else args.csv
+    args.debuglevel = 1 if int(args.verbose) > args.debuglevel else args.debuglevel
     
-    if args.debug: args.verbose = True
-    if args.verbose: print (TXT_V_ARGS % (args))
+    if args.debuglevel >= VALUE_VERBOSE_INFO: print (TXT_V_ARGS % (args))
     if args.csv:
         try:
             csv_file = open(args.output,"w", encoding=INTEGRITY_DEFAULT_ENCODING)
@@ -326,10 +368,37 @@ def main():
 
     # Clean-up and close-up
     if args.csv: csv_file.close()
-    
+
+    if args.summary:
+        print (TXT_O_SUMMARY_FILES)
+        print (TXT_O_SUMMARY_FILES_NEW % (summary_files.new))
+        print (TXT_O_SUMMARY_FILES_UNCHANGED % (summary_files.unchanged))
+        print (TXT_O_SUMMARY_FILES_CHANGED % (summary_files.changed))
+        print (TXT_O_SUMMARY_FILES_IGNORED % (summary_files.ignored))
+        print (TXT_O_SUMMARY_FILES_ERRORS % (summary_files.errors))
+
 
 if __name__ == '__main__':
     main()
 
 
-    # TODO: Hacer que el verbose sea un nivel de 0 a X en vez de valores (verbose, debug, ...)
+# TODO: Pre-scan: generate statistics of files to process in order to offer approximate evolution in %
+# TODO: Mejorar la opción summary
+#           - Directorios procesados:
+#               - Directorios omitidos:
+#               - Directorios sin nada que hashear:
+#           - Ficheros procesados (hashes calculados):
+#               - Ficheros omitidos: (actualmente no se distinguen de los directorios)
+# TODO: Continuar... actualizar sólo ficheros que no tienen hash
+# TODO: Múltiples algoritmos de hashing
+# TODO: Indicar separador de campos en CSV
+# TODO: Comandos de comparación (p.ej. en vivo o basado en CSVs), usando Pandas
+#           - Mirror mode
+#           - Analisis sobre un CSV
+#               - Filtrar duplicados
+#               - Mostrar cambiados
+#               - Generar summary desde CSV
+#               - Comparar CSV buscando ficheros con hash diferente y metadatos idénticos
+#               - Ignorando rutas relativas si todo lo demás coincide
+#               - ... 
+#       https://docs.python.org/3/library/argparse.html#sub-commands
