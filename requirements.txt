@@ -1,1 +1,4 @@
 pyyaml
+colorama
+numpy
+pandas
