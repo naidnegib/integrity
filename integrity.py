@@ -1,4 +1,5 @@
 # integrity.py
+# A.K.A. IntegrityChecker
 # Create/check files parity recursively
 import sys
 import argparse
@@ -93,7 +94,6 @@ TXT_O_SUMMARY_FILES_ERRORS =    "Files " + Fore.RED +    "[ERROR]    " + Fore.RE
 TXT_O_SUMMARY_FILES_IGNORED =   "Files " +               "[Ignored]  " +              "%12d"
 TXT_O_SUMMARY_FILES_NEW =       "Files " + Fore.BLUE +   "[NEW]      " + Fore.RESET + "%12d"
 TXT_O_SUMMARY_FILES_UNCHANGED = "Files " + Fore.GREEN +  "[OK]       " + Fore.RESET + "%12d"
-
 TXT_O_VERSION = "%s Version %s"
 
 TXT_E_ACCESS = Fore.RED + "[ERROR] " + Fore.RESET + "'%s' failed to be accessed"
