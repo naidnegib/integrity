@@ -10,6 +10,7 @@ from io import StringIO
 from colorama import Fore #, Back, Style
 import pandas as pd
 import numpy as np
+import time
 
 # Constants and strings
 ANALYZE_DEFAULT_ENCODING = 'utf8'
@@ -26,6 +27,8 @@ VALUE_VERBOSE_DETAIL = 2
 VALUE_VERBOSE_DEBUG = 3
 
 TXT_V_ARGS = "Arguments detected: %s"
+TXT_V_HOUR_FORMAT = "%H:%M:%S"
+
 
 TXT_PROG = ANALYZE_DESC
 TXT_DESCRIPTION = "Analyze integrity hashes from IntegrityChecker-generated CSV files"
@@ -49,10 +52,13 @@ TXT_HELP_VERSION = "Print current version and exits"
 # CSV Entries: path, filename, size, changed, hash, oldhash, date, modification
 TXT_O_CSV_HEADER = "PATH;FILENAME;SIZE;CHANGED;HASH;PREV_HASH;DATE;MODIFICATION"
 TXT_O_CSV_LINE = "\"%s\";\"%s\";%s;\"%s\";\"%s\";\"%s\";\"%s\";\"%s\""
+TXT_O_ELAPSED_TIME = "Elapsed time: %s"
 TXT_O_VERSION = "%s Version %s"
 
 ## main ##
 def main():
+    # Start timer for measuring processing
+    start_time = time.time()
     # Parse command-line parameters and adjust values
     parser = argparse.ArgumentParser(description=TXT_DESCRIPTION, prog=TXT_PROG)
     parser.add_argument('file', nargs=2, type=str, help=TXT_HELP_FILES)
@@ -75,8 +81,27 @@ def main():
     # Run process
     #processFolder(path, args, csv_file)
 
-    pd.read_csv(args.file[0], sep=VALUE_DEFAULT_SEPARATOR)
+    # try:
+    df_file1 = pd.read_csv(args.file[0], sep=VALUE_DEFAULT_SEPARATOR)
 
+    # Amount of duplicated hashes
+    print(df_file1.duplicated(subset='HASH').sum())
+
+    #Option 1: duplicated Ids dataframe
+    hashes = df_file1["HASH"]
+    df_file1_duplicated_hashes = df_file1[hashes.isin(hashes[hashes.duplicated()])]
+    print(df_file1_duplicated_hashes)
+
+    #Option 2: Duplicated values grouped by hash and file size (slower)
+    df_file1_grouped_duplicates = pd.concat(g for _, g in df_file1.groupby(["HASH", "SIZE"]) if len(g) > 1)
+    print(df_file1_grouped_duplicates)
+    
+    # Calculate processing time
+    end_time = time.time()
+    elapsed_time_str = time.strftime(TXT_V_HOUR_FORMAT, time.gmtime(end_time-start_time))
+    if args.debuglevel >= VALUE_VERBOSE_INFO: print (TXT_O_ELAPSED_TIME % elapsed_time_str)
+
+    print (TXT_O_ELAPSED_TIME % elapsed_time_str)
 
 if __name__ == '__main__':
     main()

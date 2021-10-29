@@ -92,6 +92,7 @@ Dependencies:
 * `--debug` replaced by debug level `--debuglevel`
 * Description (out of verbose mode), in color, for New, Changed and unchanged (Ok) files
 * `--summay` partly implemented to start offering results
+* Elapsed time information is now available
 
 ## v0.3
 * Version output (`--version`)

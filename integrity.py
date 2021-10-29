@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from io import StringIO
 from colorama import Fore #, Back, Style
+import time
 
 time_zone = None
 
@@ -60,7 +61,7 @@ TXT_HELP_RECURSIVE = "Process subfolders recursively"
 TXT_HELP_IGNORE = "Ignore already stored hashes (avoid changes detection)"
 TXT_HELP_IGNORE_DOTS = "Include all. Do NOT ignore files and folders stating with dot (.)"
 TXT_HELP_OUTPUT = "Output CSV contents to specified file. Ignored if a CSV argument is not present."
-TXT_HELP_SUMMARY = "Print a summary of processed files when finish"
+TXT_HELP_SUMMARY = "Print summary of processed files"
 TXT_HELP_TEST = "Test mode. Does NOT write updates to hash files"
 TXT_HELP_VERBOSE = "Verbose mode"
 TXT_HELP_VERSION = "Print current version and exits"
@@ -79,12 +80,14 @@ TXT_V_FILES_OUTPUT_CONTENTS = "------------------- FILE %s TO DUMP -------------
 TXT_V_FILES_OUTPUT_OK = "%s saved properly"
 TXT_V_FILES_READING_INPUT = "Warning: '%s' can't read previous information"
 TXT_V_GENERATING_HASHES = "Generating hashes for directory: %s"
+TXT_V_HOUR_FORMAT = "%H:%M:%S"
 TXT_V_PROCESSING_EXISTING_HASHES = "Processing already existing hashes for directory: %s"
 
 # CSV Entries: path, filename, size, changed, hash, oldhash, date, modification
 TXT_O_CSV_HEADER = "PATH;FILENAME;SIZE;CHANGED;HASH;PREV_HASH;DATE;MODIFICATION"
 TXT_O_CSV_LINE = "\"%s\";\"%s\";%s;\"%s\";\"%s\";\"%s\";\"%s\";\"%s\""
 
+TXT_O_ELAPSED_TIME = "Elapsed time: %s"
 TXT_O_FILES_CHANGED = Fore.YELLOW + "[CHANGE] " + Fore.RESET + "File '%s' changed from: '%s' to: '%s'"
 TXT_O_FILES_NEW =  Fore.BLUE + "[NEW] " + Fore.RESET + "File '%s' hashed: '%s'"
 TXT_O_FILES_NOT_CHANGED = Fore.GREEN + "[OK] " + Fore.RESET + "File '%s' hashed: '%s'"
@@ -94,6 +97,7 @@ TXT_O_SUMMARY_FILES_ERRORS =    "Files " + Fore.RED +    "[ERROR]    " + Fore.RE
 TXT_O_SUMMARY_FILES_IGNORED =   "Files " +               "[Ignored]  " +              "%12d"
 TXT_O_SUMMARY_FILES_NEW =       "Files " + Fore.BLUE +   "[NEW]      " + Fore.RESET + "%12d"
 TXT_O_SUMMARY_FILES_UNCHANGED = "Files " + Fore.GREEN +  "[OK]       " + Fore.RESET + "%12d"
+
 TXT_O_VERSION = "%s Version %s"
 
 TXT_E_ACCESS = Fore.RED + "[ERROR] " + Fore.RESET + "'%s' failed to be accessed"
@@ -321,6 +325,9 @@ def processFolder(path, args, csv_file):
 
 ## main ##
 def main():
+    # Start timer for measuring processing
+    start_time = time.time()
+
     # Parse command-line parameters and adjust values
     parser = argparse.ArgumentParser(description=TXT_DESCRIPTION, prog=TXT_PROG)
     group_csv = parser.add_mutually_exclusive_group()
@@ -369,6 +376,12 @@ def main():
     # Clean-up and close-up
     if args.csv: csv_file.close()
 
+    # Calculate processing time
+    end_time = time.time()
+    elapsed_time_str = time.strftime(TXT_V_HOUR_FORMAT, time.gmtime(end_time-start_time))
+    if args.debuglevel >= VALUE_VERBOSE_INFO: print (TXT_O_ELAPSED_TIME % elapsed_time_str)
+
+
     if args.summary:
         print (TXT_O_SUMMARY_FILES)
         print (TXT_O_SUMMARY_FILES_NEW % (summary_files.new))
@@ -376,6 +389,7 @@ def main():
         print (TXT_O_SUMMARY_FILES_CHANGED % (summary_files.changed))
         print (TXT_O_SUMMARY_FILES_IGNORED % (summary_files.ignored))
         print (TXT_O_SUMMARY_FILES_ERRORS % (summary_files.errors))
+        print (TXT_O_ELAPSED_TIME % (elapsed_time_str))
 
 
 if __name__ == '__main__':
@@ -402,3 +416,4 @@ if __name__ == '__main__':
 #               - Ignorando rutas relativas si todo lo demás coincide
 #               - ... 
 #       https://docs.python.org/3/library/argparse.html#sub-commands
+# TODO: Add --nocolor option for simplified shells
