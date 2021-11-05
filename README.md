@@ -8,18 +8,19 @@ By default `.nfo` files are YAML text files, but they can be set to JSON format 
 ## Usage
 
 ```
-usage: IntegrityChecker [-h] [-V] [-p] [-a] [-e] [-r] [-j] [-c | -f] [-o OUTPUT] [-i] [-t] [-s] [-v] [-d {1,2,3}] [path]
+usage: IntegrityChecker [-h] [-V] [-p] [-a] [-q] [-e] [-r] [-j] [-c | -f] [-o OUTPUT] [-i] [-t] [-s] [-v] [-d {1,2,3}] [path]
 
 Create and check integrity checksums and hashes for files in folder
 
 positional arguments:
   path
 
-options:
+optional arguments:
   -h, --help            show this help message and exit
   -V, --version         Print current version and exits
   -p, --absolutepath    Save absolute path
   -a, --all             Include all. Do NOT ignore files and folders stating with dot (.)
+  -q, --quickadd        Quick add new files. Do not check or process already known files
   -e, --empty           Do not write hash files into empty folders (leaving them empty)
   -r, --recursive       Process subfolders recursively
   -j, --json            Check/Save hash file using JSON format instead of YAML
@@ -29,7 +30,7 @@ options:
                         Output CSV contents to specified file. Ignored if a CSV argument is not present.
   -i, --ignore          Ignore already stored hashes (avoid changes detection)
   -t, --test            Test mode. Does NOT write updates to hash files
-  -s, --summary         Print a summary of processed files after finishing
+  -s, --summary         Print a summary of processed files when finish
   -v, --verbose         Verbose mode
   -d {1,2,3}, --debuglevel {1,2,3}
                         Debug level: 1: Verbose (--verbose); 2: Detailed; 3: Debug
@@ -82,8 +83,9 @@ Not only to existing files, but for detecting other changes such as:
 
 # Building
 
-Dependencies:
-* pyyaml
+`IntegrityChecker` Dependencies:
+* `pyyaml`
+* `colorama`
 
 # Changelog
 
@@ -92,6 +94,8 @@ Dependencies:
 * `--debug` replaced by debug level `--debuglevel`
 * Description (out of verbose mode), in color, for New, Changed and unchanged (Ok) files
 * `--summay` partly implemented to start offering results
+* `--quickadd` (not refined) to add new files into checksums ignoring the already existing ones
+* Strings and constants moved to `constants.py`
 
 ## v0.3
 * Version output (`--version`)
@@ -113,3 +117,35 @@ Dependencies:
 * Include/ignore files starting with a dot (`--all`)
 * Save results into `.nfo` files using JSON format (`--json`)
 * Basic functionality to work and process parameters
+
+
+# Backlog
+
+List of features being considered to be implemented:
+
+- [WIP] 'Continue'... to update only those files that are not already hashed
+- Pre-scan: Generate initial statistics of files to process in order to offer an estimated progress bar or %
+- Upgrade summary:
+  - Folders
+    - Processed folders
+    - Empty folders
+  - Processed files (processed hashes)
+    - Omitted files (currently only folders are considered)
+- Offer multiple hasing algorithms
+- Set CSV field delimitator
+- Comparisson commands (i.e. life comparisson or only-CSV-based) --> New command (Testing WIP using Pandas)
+  - Mirror mode
+  - CSV Analysis
+    - Duplicated files
+    - Changed files
+    - Summary from CSV
+    - Compare 2 CSVs to find different hashes on entries with same metadata
+    - Ignore relative paths if everything is equal
+- Check only one file (against local .nfo or general .csv) so it can be scripted
+
+
+# Known Bugs
+
+List of known bugs or limitations currently detected on the applications:
+
+- Nothing here still... testing needed
